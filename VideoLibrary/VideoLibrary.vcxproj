@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="..\packages\Microsoft.Windows.CppWinRT.1.0.190211.5\build\native\Microsoft.Windows.CppWinRT.props" Condition="Exists('..\packages\Microsoft.Windows.CppWinRT.1.0.190211.5\build\native\Microsoft.Windows.CppWinRT.props')" />
+  <PropertyGroup Label="Globals">
+    <CppWinRTEnabled>true</CppWinRTEnabled>
+    <RequiredBundles>$(RequiredBundles);Microsoft.Windows.CppWinRT</RequiredBundles>
+    <MinimalCoreWin>true</MinimalCoreWin>
+    <VCProjectVersion>15.0</VCProjectVersion>
+    <ProjectGuid>{3ce469f1-0be6-4aad-abd3-e49a9e270cd0}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>VideoLibrary</RootNamespace>
+    <WindowsTargetPlatformVersion Condition=" '$(WindowsTargetPlatformVersion)' == '' ">10.0.17763.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformMinVersion>10.0.17134.0</WindowsTargetPlatformMinVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <PlatformToolset>v141</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration">
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release'" Label="Configuration">
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <SpectreMitigation>false</SpectreMitigation>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <SpectreMitigation>false</SpectreMitigation>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <SpectreMitigation>false</SpectreMitigation>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <SpectreMitigation>false</SpectreMitigation>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+    <Import Project="..\Common\Common.vcxitems" Label="Shared" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <PrecompiledHeaderOutputFile>$(IntDir)pch.pch</PrecompiledHeaderOutputFile>
+      <PreprocessorDefinitions>_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <WarningLevel>Level4</WarningLevel>
+      <AdditionalOptions>%(AdditionalOptions) /permissive- /bigobj</AdditionalOptions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateWindowsMetadata>false</GenerateWindowsMetadata>
+    </Link>
+    <FxCompile>
+      <VariableName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+      </VariableName>
+    </FxCompile>
+    <FxCompile>
+      <HeaderFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+      </HeaderFileOutput>
+    </FxCompile>
+    <FxCompile>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" />
+    </FxCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Platform)'=='Win32'">
+    <ClCompile>
+      <PreprocessorDefinitions>WIN32;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <FxCompile>
+      <VariableName Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </VariableName>
+    </FxCompile>
+    <FxCompile>
+      <HeaderFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </HeaderFileOutput>
+    </FxCompile>
+    <FxCompile>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" />
+    </FxCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateWindowsMetadata>false</GenerateWindowsMetadata>
+    </Link>
+    <FxCompile>
+      <VariableName Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </VariableName>
+    </FxCompile>
+    <FxCompile>
+      <HeaderFileOutput Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </HeaderFileOutput>
+    </FxCompile>
+    <FxCompile>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" />
+    </FxCompile>
+    <FxCompile>
+      <VariableName Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+      </VariableName>
+    </FxCompile>
+    <FxCompile>
+      <HeaderFileOutput Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+      </HeaderFileOutput>
+    </FxCompile>
+    <FxCompile>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Release|x64'" />
+    </FxCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="ShaderCache.h" />
+    <ClInclude Include="AudioMedia.h" />
+    <ClInclude Include="DesktopMonitor.h" />
+    <ClInclude Include="DxMultithread.h" />
+    <ClInclude Include="DxResource.h" />
+    <ClInclude Include="EncodingContext.h" />
+    <ClInclude Include="Errors.h" />
+    <ClInclude Include="Pipeline.h" />
+    <ClInclude Include="RefCountedObject.h" />
+    <ClInclude Include="RenderDirtyRectsStep.h" />
+    <ClInclude Include="RenderMoveRectsStep.h" />
+    <ClInclude Include="RenderPointerTextureStep.h" />
+    <ClInclude Include="KeyedMutexLock.h" />
+    <ClInclude Include="ScreenMediaSinkWriter.h" />
+    <ClInclude Include="AsyncMediaSourceReader.h" />
+    <ClInclude Include="SourceState.h" />
+    <ClInclude Include="TexturePool.h" />
+    <ClInclude Include="TextureToMediaSampleStep.h" />
+    <ClInclude Include="pch.h" />
+    <ClInclude Include="DesktopPointer.h" />
+    <ClInclude Include="RecordingStep.h" />
+    <ClInclude Include="CaptureFrameStep.h" />
+    <ClInclude Include="VirtualDesktop.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="ShaderCache.cpp" />
+    <ClCompile Include="AudioMedia.cpp" />
+    <ClCompile Include="DesktopMonitor.cpp" />
+    <ClCompile Include="DxResource.cpp" />
+    <ClCompile Include="Errors.cpp" />
+    <ClCompile Include="Pipeline.cpp" />
+    <ClCompile Include="RenderDirtyRectsStep.cpp" />
+    <ClCompile Include="RenderMoveRectsStep.cpp" />
+    <ClCompile Include="RenderPointerTextureStep.cpp" />
+    <ClCompile Include="ScreenMediaSinkWriter.cpp" />
+    <ClCompile Include="AsyncMediaSourceReader.cpp" />
+    <ClCompile Include="TexturePool.cpp" />
+    <ClCompile Include="TextureToMediaSampleStep.cpp" />
+    <ClCompile Include="pch.cpp">
+      <PrecompiledHeader>Create</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="DesktopPointer.cpp" />
+    <ClCompile Include="RecordingStep.cpp" />
+    <ClCompile Include="CaptureFrameStep.cpp" />
+    <ClCompile Include="VirtualDesktop.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+    <Import Project="..\packages\Microsoft.Windows.CppWinRT.1.0.190211.5\build\native\Microsoft.Windows.CppWinRT.targets" Condition="Exists('..\packages\Microsoft.Windows.CppWinRT.1.0.190211.5\build\native\Microsoft.Windows.CppWinRT.targets')" />
+  </ImportGroup>
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
+    </PropertyGroup>
+    <Error Condition="!Exists('..\packages\Microsoft.Windows.CppWinRT.1.0.190211.5\build\native\Microsoft.Windows.CppWinRT.props')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.Windows.CppWinRT.1.0.190211.5\build\native\Microsoft.Windows.CppWinRT.props'))" />
+    <Error Condition="!Exists('..\packages\Microsoft.Windows.CppWinRT.1.0.190211.5\build\native\Microsoft.Windows.CppWinRT.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.Windows.CppWinRT.1.0.190211.5\build\native\Microsoft.Windows.CppWinRT.targets'))" />
+  </Target>
+</Project>

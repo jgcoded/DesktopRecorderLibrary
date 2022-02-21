@@ -1,0 +1,31 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup Label="Globals">
+    <MSBuildAllProjects>$(MSBuildAllProjects);$(MSBuildThisFileFullPath)</MSBuildAllProjects>
+    <HasSharedItems>true</HasSharedItems>
+    <ItemsProjectGuid>{1455beb5-9040-4d50-bde0-16a51b159058}</ItemsProjectGuid>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(MSBuildThisFileDirectory)</AdditionalIncludeDirectories>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ProjectCapability Include="SourceItemsFromImports" />
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="$(MSBuildThisFileDirectory)PixelShader.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>g_%(Filename)RawData</VariableName>
+      <HeaderFileOutput>%(Filename).h</HeaderFileOutput>
+    </FxCompile>
+    <FxCompile Include="$(MSBuildThisFileDirectory)VertexShader.hlsl">
+      <ShaderType>Vertex</ShaderType>
+      <VariableName>g_%(Filename)RawData</VariableName>
+      <HeaderFileOutput>%(Filename).h</HeaderFileOutput>
+    </FxCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="$(MSBuildThisFileDirectory)Vertex.h" />
+  </ItemGroup>
+</Project>

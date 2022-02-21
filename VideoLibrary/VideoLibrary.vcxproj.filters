@@ -1,0 +1,149 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
+    <Filter Include="Recording Steps">
+      <UniqueIdentifier>{765a2b4c-d921-4320-ac55-00a5cb151103}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Video">
+      <UniqueIdentifier>{932dfe58-63b3-4b92-95ad-c78bda395b62}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="pch.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DxResource.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DesktopMonitor.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="RecordingStep.h">
+      <Filter>Recording Steps</Filter>
+    </ClInclude>
+    <ClInclude Include="DesktopPointer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="CaptureFrameStep.h">
+      <Filter>Recording Steps</Filter>
+    </ClInclude>
+    <ClInclude Include="VirtualDesktop.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="RenderPointerTextureStep.h">
+      <Filter>Recording Steps</Filter>
+    </ClInclude>
+    <ClInclude Include="SourceState.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="TextureToMediaSampleStep.h">
+      <Filter>Recording Steps</Filter>
+    </ClInclude>
+    <ClInclude Include="ScreenMediaSinkWriter.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="TexturePool.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="RefCountedObject.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="EncodingContext.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="AsyncMediaSourceReader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="AudioMedia.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Errors.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DxMultithread.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Pipeline.h">
+      <Filter>Recording Steps</Filter>
+    </ClInclude>
+    <ClInclude Include="RenderMoveRectsStep.h">
+      <Filter>Recording Steps</Filter>
+    </ClInclude>
+    <ClInclude Include="RenderDirtyRectsStep.h">
+      <Filter>Recording Steps</Filter>
+    </ClInclude>
+    <ClInclude Include="KeyedMutexLock.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ShaderCache.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="pch.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="DxResource.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="DesktopMonitor.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="RecordingStep.cpp">
+      <Filter>Recording Steps</Filter>
+    </ClCompile>
+    <ClCompile Include="DesktopPointer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CaptureFrameStep.cpp">
+      <Filter>Recording Steps</Filter>
+    </ClCompile>
+    <ClCompile Include="VirtualDesktop.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="RenderPointerTextureStep.cpp">
+      <Filter>Recording Steps</Filter>
+    </ClCompile>
+    <ClCompile Include="TextureToMediaSampleStep.cpp">
+      <Filter>Recording Steps</Filter>
+    </ClCompile>
+    <ClCompile Include="ScreenMediaSinkWriter.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TexturePool.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="AsyncMediaSourceReader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="AudioMedia.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Errors.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Pipeline.cpp">
+      <Filter>Recording Steps</Filter>
+    </ClCompile>
+    <ClCompile Include="RenderMoveRectsStep.cpp">
+      <Filter>Recording Steps</Filter>
+    </ClCompile>
+    <ClCompile Include="RenderDirtyRectsStep.cpp">
+      <Filter>Recording Steps</Filter>
+    </ClCompile>
+    <ClCompile Include="ShaderCache.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
+  </ItemGroup>
+</Project>
