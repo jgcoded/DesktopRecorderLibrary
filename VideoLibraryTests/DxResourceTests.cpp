@@ -197,5 +197,107 @@ namespace VideoLibraryTests
             delete[] (pbOutputBuffer);
             
         }
+
+
+        TEST_METHOD(DuplicationMediaSource)
+        {
+            // TODO fix and port to use winrt
+
+            /*
+                topo edit tool
+                https://msdn.microsoft.com/en-us/library/windows/desktop/ff485862(v=vs.85).aspx
+            */
+            auto hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+            Assert::IsTrue(SUCCEEDED(hr), "could not initialize com");
+
+            // initialize Media Foundation
+            hr = MFStartup(MF_VERSION);
+            Assert::IsTrue(SUCCEEDED(hr), "could not start mf");
+
+            WinPtr<IMFTopology> topo;
+            hr = MFCreateTopology(topo.ReleaseAndGetAddressOf());
+            Assert::IsTrue(SUCCEEDED(hr));
+            WinPtr<IMFTopologyNode> sourceNode;
+            hr = MFCreateTopologyNode(MF_TOPOLOGY_SOURCESTREAM_NODE, sourceNode.ReleaseAndGetAddressOf());
+            Assert::IsTrue(SUCCEEDED(hr));
+            WinPtr<DesktopDuplicationMediaSource> mediaSource;
+            mediaSource = new DesktopDuplicationMediaSource;
+            WinPtr<IMFPresentationDescriptor> pd;
+            hr = mediaSource->CreatePresentationDescriptor(pd.ReleaseAndGetAddressOf());
+            Assert::IsTrue(SUCCEEDED(hr));
+            BOOL wasSelected;
+            WinPtr<IMFStreamDescriptor> streamDescriptor;
+            hr = pd->GetStreamDescriptorByIndex(0, &wasSelected, streamDescriptor.ReleaseAndGetAddressOf());
+            Assert::IsTrue(SUCCEEDED(hr));
+            hr = sourceNode->SetUnknown(MF_TOPONODE_SOURCE, mediaSource.Get());
+            Assert::IsTrue(SUCCEEDED(hr));
+            hr = sourceNode->SetUnknown(MF_TOPONODE_PRESENTATION_DESCRIPTOR, pd.Get());
+            Assert::IsTrue(SUCCEEDED(hr));
+            hr = sourceNode->SetUnknown(MF_TOPONODE_STREAM_DESCRIPTOR, streamDescriptor.Get());
+            Assert::IsTrue(SUCCEEDED(hr));
+            hr = topo->AddNode(sourceNode.Get());
+            Assert::IsTrue(SUCCEEDED(hr));
+            WinPtr<IMFTopologyNode> sinkNode;
+            hr = MFCreateTopologyNode(MF_TOPOLOGY_OUTPUT_NODE, sinkNode.ReleaseAndGetAddressOf());
+            Assert::IsTrue(SUCCEEDED(hr));
+            WinPtr<IMFByteStream> stream;
+            hr = MFCreateFile(MF_ACCESSMODE_WRITE, MF_OPENMODE_DELETE_IF_EXIST, MF_FILEFLAGS_NONE,
+                L"testtopo.mp4", stream.ReleaseAndGetAddressOf());
+            Assert::IsTrue(SUCCEEDED(hr));
+            WinPtr<IMFMediaType> videoType = GetVideoMediaType();
+            WinPtr<IMFMediaSink> mediaSink;
+            hr = MFCreateMPEG4MediaSink(stream.Get(),
+                videoType.Get(), nullptr,
+                mediaSink.ReleaseAndGetAddressOf());
+            Assert::IsTrue(SUCCEEDED(hr));
+            WinPtr<IMFStreamSink> streamSink;
+            hr = mediaSink->GetStreamSinkByIndex(0, streamSink.ReleaseAndGetAddressOf());
+            Assert::IsTrue(SUCCEEDED(hr));
+            hr = sinkNode->SetObject(streamSink.Get());
+            Assert::IsTrue(SUCCEEDED(hr));
+            hr = sinkNode->SetUINT32(MF_TOPONODE_NOSHUTDOWN_ON_REMOVE, false);
+            Assert::IsTrue(SUCCEEDED(hr));
+            hr = topo->AddNode(sinkNode.Get());
+            Assert::IsTrue(SUCCEEDED(hr));
+            hr = sourceNode->ConnectOutput(0, sinkNode.Get(), 0);
+            Assert::IsTrue(SUCCEEDED(hr));
+            WinPtr<IMFMediaSession> session; // https://msdn.microsoft.com/en-us/library/windows/desktop/ms694084(v=vs.85).aspx
+            hr = MFCreateMediaSession(nullptr, session.ReleaseAndGetAddressOf());
+            Assert::IsTrue(SUCCEEDED(hr));
+            PROPVARIANT p;
+            PropVariantInit(&p);
+
+            hr = session->SetTopology(0 /* can also try MFSESSION_SETTOPOLOGY_IMMEDIATE */, topo.Get());
+            Assert::IsTrue(SUCCEEDED(hr));
+            hr = session->Start(&GUID_NULL, &p);
+            Assert::IsTrue(SUCCEEDED(hr));
+            PropVariantClear(&p);
+
+            // TODO missing something in the middle of source and sink to be able to encode/decode content
+
+            while (1)
+            {
+                WinPtr<IMFMediaEvent> event;
+                HRESULT hrStatus = S_OK;
+                MediaEventType met;
+
+                hr = session->GetEvent(0, event.ReleaseAndGetAddressOf());
+                Assert::IsTrue(SUCCEEDED(hr));
+                hr = event->GetStatus(&hrStatus);
+                Assert::IsTrue(SUCCEEDED(hr));
+                hr = event->GetType(&met);
+                Assert::IsTrue(SUCCEEDED(hr));
+            }
+
+            Sleep(1000000);
+
+            // shutdown Media Foundation
+            hr = MFShutdown();
+            Assert::IsTrue(SUCCEEDED(hr), "Could not shutdown media foundation");
+
+            // shutdown COM
+            CoUninitialize();
+        
+        }
     };
 }
