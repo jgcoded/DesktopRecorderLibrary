@@ -35,7 +35,8 @@ std::vector<DesktopMonitor> desktopMonitors = virtualDesktop->GetAllDesktopMonit
 DesktopMonitor monitor = desktopMonitors[0];
 
 // Create a duplicator for the monitor
-std::unique_ptr<DesktopMonitor::ScreenDuplicator> duplicator = virtualDesktop->RecordMonitor(monitor);
+std::unique_ptr<DesktopMonitor::ScreenDuplicator> duplicator =
+  virtualDesktop->RecordMonitor(monitor);
 
 // The pipeline encapsulates texture rendering
 std::unique_ptr<Pipeline> duplicationPipeline = std::make_unique<Pipeline>(duplicator);
