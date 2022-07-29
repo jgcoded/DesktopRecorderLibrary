@@ -42,15 +42,6 @@
 #include <evr.h>
 #include <windows.h>
 
-#pragma comment(lib, "mfuuid")
-#pragma comment(lib, "mfplat")
-#pragma comment(lib, "shlwapi")
-#pragma comment(lib, "mf")
-#pragma comment(lib, "mfreadwrite")
-#pragma comment(lib, "Shlwapi")
-#pragma comment(lib, "evr")
-
-
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.System.h>

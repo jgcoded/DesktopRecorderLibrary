@@ -105,6 +105,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <AdditionalLibraryDirectories>$(VCInstallDir)UnitTest\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>Msdmo.lib;dmoguids.lib;uuid.lib;amstrmid.lib;wmcodecdspuuid.lib;mfuuid.lib;mfplat.lib;shlwapi.lib;mf.lib;mfreadwrite.lib;evr.lib;msdmo.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -119,6 +120,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <AdditionalLibraryDirectories>$(VCInstallDir)UnitTest\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>Msdmo.lib;dmoguids.lib;uuid.lib;amstrmid.lib;wmcodecdspuuid.lib;mfuuid.lib;mfplat.lib;shlwapi.lib;mf.lib;mfreadwrite.lib;evr.lib;msdmo.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -137,6 +139,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <AdditionalLibraryDirectories>$(VCInstallDir)UnitTest\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>Msdmo.lib;dmoguids.lib;uuid.lib;amstrmid.lib;wmcodecdspuuid.lib;mfuuid.lib;mfplat.lib;shlwapi.lib;mf.lib;mfreadwrite.lib;evr.lib;msdmo.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -155,6 +158,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <AdditionalLibraryDirectories>$(VCInstallDir)UnitTest\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>Msdmo.lib;dmoguids.lib;uuid.lib;amstrmid.lib;wmcodecdspuuid.lib;mfuuid.lib;mfplat.lib;shlwapi.lib;mf.lib;mfreadwrite.lib;evr.lib;msdmo.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -173,12 +177,12 @@
     <ClCompile Include="DxResourceTests.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\VideoLibrary\VideoLibrary.vcxproj">
       <Project>{3ce469f1-0be6-4aad-abd3-e49a9e270cd0}</Project>
     </ProjectReference>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="packages.config" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

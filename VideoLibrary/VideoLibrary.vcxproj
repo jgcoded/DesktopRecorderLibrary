@@ -85,6 +85,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateWindowsMetadata>false</GenerateWindowsMetadata>
+      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">mf.lib;mfplat.lib;mfuuid.lib;evr.lib;shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <FxCompile>
       <VariableName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">

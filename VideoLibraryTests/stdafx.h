@@ -42,6 +42,8 @@
 #include <winrt\Windows.Storage.h>
 
 #include <queue>
+#include <mutex>
+#include <functional>
 
 #include <d3d11.h>
 #include <dxgi.h>

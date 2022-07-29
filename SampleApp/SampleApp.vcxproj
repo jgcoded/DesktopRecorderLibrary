@@ -86,6 +86,8 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateWindowsMetadata>false</GenerateWindowsMetadata>
+      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">mfuuid.lib;mfplat.lib;shlwapi.lib;mf.lib;mfreadwrite.lib;evr.lib;user32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PostBuildEvent>
       <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -103,6 +105,9 @@
     <Manifest>
       <EnableDpiAwareness Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">PerMonitorHighDPIAware</EnableDpiAwareness>
     </Manifest>
+    <Link>
+      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">mfuuid.lib;mfplat.lib;shlwapi.lib;mf.lib;mfreadwrite.lib;evr.lib;user32.lib</AdditionalDependencies>
+    </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
     <ClCompile>
@@ -118,6 +123,8 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateWindowsMetadata>false</GenerateWindowsMetadata>
+      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">mfuuid.lib;mfplat.lib;shlwapi.lib;mf.lib;mfreadwrite.lib;evr.lib;user32.lib</AdditionalDependencies>
+      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Release|x64'">mfuuid.lib;mfplat.lib;shlwapi.lib;mf.lib;mfreadwrite.lib;evr.lib;user32.lib</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -147,12 +154,12 @@
     <Image Include="icon.ico" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\VideoLibrary\VideoLibrary.vcxproj">
       <Project>{3ce469f1-0be6-4aad-abd3-e49a9e270cd0}</Project>
     </ProjectReference>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="packages.config" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

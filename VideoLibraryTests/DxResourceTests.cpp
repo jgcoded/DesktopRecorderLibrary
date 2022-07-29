@@ -27,14 +27,6 @@ using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 #include <uuids.h>
 #include <dmort.h>
 
-// Msdmo.lib;dmoguids.lib;uuid.lib;amstrmid.lib;wmcodecdspuuid.lib;%(AdditionalDependencies)
-#pragma comment(lib, "msdmo")
-#pragma comment(lib, "dmoguids")
-#pragma comment(lib, "uuid")
-#pragma comment(lib, "amstrmid")
-#pragma comment(lib, "wmcodecdspuuid")
-
-
 namespace VideoLibraryTests
 {
     class CBaseMediaBuffer : public IMediaBuffer {
