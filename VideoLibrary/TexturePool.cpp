@@ -94,3 +94,13 @@ winrt::com_ptr<ID3D11Texture2D> TexturePool::CreateTexture()
     mDevice->CreateTexture2D(&moveDesc, nullptr, texture.put());
     return texture;
 }
+
+HRESULT TexturePool::QueryInterface(REFIID riid, void** ppv) noexcept
+{
+    static const QITAB qit[] =
+    {
+        QITABENT(TexturePool, IMFAsyncCallback),
+        { 0 }
+    };
+    return QISearch(this, qit, riid, ppv);
+}

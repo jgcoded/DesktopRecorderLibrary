@@ -44,6 +44,8 @@
 #include <algorithm>
 #include <memory>
 #include <queue>
+#include <functional>
+#include <mutex>
 
 #include "VertexShader.h"
 #include "PixelShader.h"

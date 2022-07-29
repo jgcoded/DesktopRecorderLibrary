@@ -20,8 +20,9 @@
 #pragma once
 
 #include "DesktopMonitor.h"
+#include "RefCountedObject.h"
 
-class TexturePool : public winrt::implements<TexturePool, IMFAsyncCallback>
+class TexturePool : public IMFAsyncCallback, public RefCountedObject
 {
 public:
 
@@ -34,6 +35,10 @@ public:
     virtual HRESULT STDMETHODCALLTYPE GetParameters(DWORD* pdwFlags, DWORD* pdwQueue) override;
 
     virtual HRESULT STDMETHODCALLTYPE Invoke(IMFAsyncResult* pAsyncResult) override;
+
+    STDMETHODIMP_(ULONG) AddRef() { return RefCountedObject::AddRef(); }
+    STDMETHODIMP_(ULONG) Release() { return RefCountedObject::Release(); }
+    virtual HRESULT QueryInterface(REFIID riid, void** ppv) noexcept override;
 
 private:
 

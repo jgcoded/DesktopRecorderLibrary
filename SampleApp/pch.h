@@ -27,6 +27,8 @@
 #include <iostream>
 #include <queue>
 #include <atomic>
+#include <mutex>
+#include <functional>
 
 #include <d3d11.h>
 #include <dxgi.h>
@@ -50,6 +52,7 @@
 
 
 #include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.System.h>
 #include <winrt/Windows.ApplicationModel.h>
 #include <winrt/Windows.Media.MediaProperties.h>
