@@ -27,6 +27,8 @@ using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 #include <uuids.h>
 #include <dmort.h>
 
+#include <fstream>
+
 namespace VideoLibraryTests
 {
     class CBaseMediaBuffer : public IMediaBuffer {
@@ -82,12 +84,13 @@ namespace VideoLibraryTests
         }
     };
 
-    TEST_CLASS(DxResourceTests)
+    TEST_CLASS(AudioTests)
     {
     public:
 
-        TEST_METHOD(CreateDevice)
+        TEST_METHOD(TestAECAudioCapture)
         {
+            // https://github.com/microsoft/Windows-classic-samples/blob/27ffb0811ca761741502feaefdb591aebf592193/Samples/Win7Samples/multimedia/audio/aecmicarray/AecSDKDemo.cpp
             winrt::check_hresult(MFStartup(MF_VERSION));
             CoInitialize(NULL);
             //winrt::init_apartment();
@@ -98,14 +101,32 @@ namespace VideoLibraryTests
             auto properties = voiceCaptureDsp.as<IPropertyStore>();
 
             // set Audio echo cancellation and Microphone array processing modes
+            /*
+            * For ARC modes (0 and 4), must play audio from speaker, as if
+            * to simulate a conference call where the application will play
+            * audio output via the speakers as others in the call are speaking
+                AEC only mode:	SINGLE_CHANNEL_AEC (0)
+                MicArray only mode:  	OPTIBEAM_ARRAY_ONLY (2)
+                AEC + MicArray mode:  	OPTIBEAM_ARRAY_AND_AEC (4)
+                No AEC or MicArray:  	SINGLE_CHANNEL_NSAGC (5)
+            */
             PROPVARIANT prop{};
             PropVariantInit(&prop);
             prop.vt = VT_I4;
-            prop.lVal = 5;
+            prop.lVal = OPTIBEAM_ARRAY_AND_AEC;
             winrt::check_hresult(properties->SetValue(MFPKEY_WMAAECMA_SYSTEM_MODE, prop));
             PropVariantClear(&prop);
 
+            PROPVARIANT pvDeviceId;
+            PropVariantInit(&pvDeviceId);
+            pvDeviceId.vt = VT_I4;
+            pvDeviceId.lVal = (unsigned long)(0 << 16) + (unsigned long)(0x0000ffff & 0);
+            winrt::check_hresult(properties->SetValue(MFPKEY_WMAAECMA_DEVICE_INDEXES, pvDeviceId));
+            winrt::check_hresult(properties->GetValue(MFPKEY_WMAAECMA_DEVICE_INDEXES, &pvDeviceId));
+            PropVariantClear(&pvDeviceId);
+
             // Turn on feature modes
+            /*
             PROPVARIANT pvFeatrModeOn;
             PropVariantInit(&pvFeatrModeOn);
             pvFeatrModeOn.vt = VT_BOOL;
@@ -136,27 +157,22 @@ namespace VideoLibraryTests
             pvCntrClip.boolVal = (VARIANT_BOOL)-1;
             winrt::check_hresult(properties->SetValue(MFPKEY_WMAAECMA_FEATR_CENTER_CLIP, pvCntrClip));
             PropVariantClear(&pvCntrClip);
+            */
 
+            WAVEFORMATEX wfxOut = { WAVE_FORMAT_PCM, 1, 16000, 32000, 2, 16, 0 };
+            DMO_MEDIA_TYPE mt{ 0 };  // Media type.
 
-            DMO_MEDIA_TYPE mt;  // Media type.
+            // Allocate the format block to hold the WAVEFORMATEX structure.
+            winrt::check_hresult(MoInitMediaType(&mt, sizeof(WAVEFORMATEX)));
+
             mt.majortype = MEDIATYPE_Audio;
             mt.subtype = MEDIASUBTYPE_PCM;
             mt.lSampleSize = 0;
             mt.bFixedSizeSamples = TRUE;
             mt.bTemporalCompression = FALSE;
             mt.formattype = FORMAT_WaveFormatEx;
+            memcpy(mt.pbFormat, &wfxOut, sizeof(WAVEFORMATEX));
 
-            // Allocate the format block to hold the WAVEFORMATEX structure.
-            winrt::check_hresult(MoInitMediaType(&mt, sizeof(WAVEFORMATEX)));
-
-            WAVEFORMATEX *pwav = (WAVEFORMATEX*)mt.pbFormat;
-            pwav->wFormatTag = WAVE_FORMAT_PCM;
-            pwav->nChannels = 1;
-            pwav->nSamplesPerSec = 16000;
-            pwav->nAvgBytesPerSec = 32000;
-            pwav->nBlockAlign = 2;
-            pwav->wBitsPerSample = 16;
-            pwav->cbSize = 0;
 
             // Set the output type.
             winrt::check_hresult(voiceCaptureDsp->SetOutputType(0, &mt, 0));
@@ -169,25 +185,40 @@ namespace VideoLibraryTests
             DMO_OUTPUT_DATA_BUFFER OutputBufferStruct = { 0 };
             OutputBufferStruct.pBuffer = &outputBuffer;
             DWORD status = 0;
-            int i = 0;
-            WAVEFORMATEX wfxOut = { WAVE_FORMAT_PCM, 1, 16000, 32000, 2, 16, 0 };
 
             auto cOutputBufLen = wfxOut.nSamplesPerSec * wfxOut.nBlockAlign;
-            auto pbOutputBuffer = new BYTE[cOutputBufLen];
+            BYTE* pbOutputBuffer = new BYTE[cOutputBufLen];
 
-            while (i++ < 100)
+            /*
+            play with:
+            vlc --demux=rawaud --rawaud-channels 1 --rawaud-samplerate 16000 out.pcm
+            */
+            std::basic_ofstream<BYTE> outPcm{ "out.pcm", std::ios::binary };
+
+            // capture
+            int i = 10 * 100;
+            while (i-- > 0)
             {
-                outputBuffer.Init((byte*)pbOutputBuffer, cOutputBufLen, 0);
-                OutputBufferStruct.dwStatus = 0;
-                auto hr = voiceCaptureDsp->ProcessOutput(0, 1, &OutputBufferStruct, &status);
-                DWORD c = 0;
-                outputBuffer.GetBufferAndLength(nullptr, &c);
-                printf("%d %d", c, status);
-                Sleep(30);
-            }
+                Sleep(10);
 
+                do
+                {
+                    outputBuffer.Init((byte*)pbOutputBuffer, cOutputBufLen, 0);
+                    OutputBufferStruct.dwStatus = 0;
+                    auto hr = voiceCaptureDsp->ProcessOutput(0, 1, &OutputBufferStruct, &status);
+                    DWORD c = 0;
+
+                    if (hr != S_FALSE) {
+                        winrt::check_hresult(outputBuffer.GetBufferAndLength(nullptr, &c));
+                    }
+                    printf("%d %d", c, status);
+
+                    outPcm.write(pbOutputBuffer, c);
+                } while (OutputBufferStruct.dwStatus & DMO_OUTPUT_DATA_BUFFERF_INCOMPLETE);
+
+            }
             delete[] (pbOutputBuffer);
-            
+
         }
     };
 }
