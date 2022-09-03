@@ -81,52 +81,162 @@ void RenderDirtyRectsStep::UpdateDirtyRects()
 
     // be careful with the types of these integers - they should be signed ints
     // or else the below vertices position calculations will overflow
-    const RECT desktopMonitorRect = mFrame->DesktopMonitorBounds();
-    const LONG centerX = sharedSurfaceDesc.Width / 2;
-    const LONG centerY = sharedSurfaceDesc.Height / 2;
+    const LONG centerX = (LONG)sharedSurfaceDesc.Width / 2;
+    const LONG centerY = (LONG)sharedSurfaceDesc.Height / 2;
     const RECT virtualDesktopRect = mFrame->VirtualDesktop()->VirtualDesktopBounds();
     const LONG offsetX = virtualDesktopRect.left;
     const LONG offsetY = virtualDesktopRect.top;
 
+    const RECT desktopBounds = mFrame->DesktopMonitorBounds();
+    const LONG desktopWidth = desktopBounds.right - desktopBounds.left;
+    const LONG desktopHeight = desktopBounds.bottom - desktopBounds.top;
+
     RECT* dirtyRects = mFrame->DirtyRects();
 
     for (size_t i = 0; i < mFrame->DirtyRectsCount(); ++i) {
+    /*
+        Identity and unspecified:
+        2                4
+        +---------------+
+        |               |
+        |               |
+        +---------------+
+        1               3
+
+        90 CCW:
+        2        4
+        +--------+
+        |        |
+        |        |
+        |        |
+        |        |
+        +--------+
+        1        3
+
+
+        180 CCW:
+        4               1
+        +---------------+
+        |               |
+        |               |
+        +---------------+
+        2               3
+
+        270 CCW:
+        1        3
+        +--------+
+        |        |
+        |        |
+        |        |
+        |        |
+        +--------+
+        4        2
+
+    */
+        RECT dirtyRect = dirtyRects[i];
+        RECT rotatedRect = dirtyRects[i];
+
+        switch (mFrame->Rotation())
+        {
+        case DXGI_MODE_ROTATION_ROTATE90:
+            rotatedRect.left = desktopWidth - dirtyRect.bottom;
+            rotatedRect.top = dirtyRect.left;
+            rotatedRect.right = desktopWidth - dirtyRect.top;
+            rotatedRect.bottom = dirtyRect.right;
+            break;
+
+        case DXGI_MODE_ROTATION_ROTATE180:
+            rotatedRect.left = desktopWidth - dirtyRect.right;
+            rotatedRect.top = desktopHeight - dirtyRect.bottom;
+            rotatedRect.right = desktopWidth - dirtyRect.left;
+            rotatedRect.bottom = desktopHeight - dirtyRect.top;
+            break;
+
+        case DXGI_MODE_ROTATION_ROTATE270:
+            rotatedRect.left = dirtyRect.top;
+            rotatedRect.top = desktopHeight - dirtyRect.right;
+            rotatedRect.right = dirtyRect.bottom;
+            rotatedRect.bottom = desktopHeight - dirtyRect.left;
+            break;
+
+        case DXGI_MODE_ROTATION_IDENTITY:
+        case DXGI_MODE_ROTATION_UNSPECIFIED:
+        default:
+            break;
+        }
+
+        TexCoord bottomLeft = { dirtyRect.left / static_cast<FLOAT>(desktopImageDesc.Width), dirtyRect.bottom / static_cast<FLOAT>(desktopImageDesc.Height) };
+        TexCoord topLeft = { dirtyRect.left / static_cast<FLOAT>(desktopImageDesc.Width), dirtyRect.top / static_cast<FLOAT>(desktopImageDesc.Height) };
+        TexCoord bottomRight = { dirtyRect.right / static_cast<FLOAT>(desktopImageDesc.Width), dirtyRect.bottom / static_cast<FLOAT>(desktopImageDesc.Height) };
+        TexCoord topRight = { dirtyRect.right / static_cast<FLOAT>(desktopImageDesc.Width), dirtyRect.top / static_cast<FLOAT>(desktopImageDesc.Height) };
+
         // set vertex buffer at [i]
         auto vertices = mVertexBuffer->data() + i * g_VerticesPerRect;
-        RECT dirtyRect = dirtyRects[i];
 
         switch (mFrame->Rotation()) {
         case DXGI_MODE_ROTATION_IDENTITY:
         case DXGI_MODE_ROTATION_UNSPECIFIED:
 
-            vertices[0].texCoord = { dirtyRect.left / static_cast<FLOAT>(desktopImageDesc.Width), dirtyRect.bottom / static_cast<FLOAT>(desktopImageDesc.Height) };
-            vertices[1].texCoord = { dirtyRect.left / static_cast<FLOAT>(desktopImageDesc.Width), dirtyRect.top / static_cast<FLOAT>(desktopImageDesc.Height) };
-            vertices[2].texCoord = { dirtyRect.right / static_cast<FLOAT>(desktopImageDesc.Width), dirtyRect.bottom / static_cast<FLOAT>(desktopImageDesc.Height) };
-            vertices[5].texCoord = { dirtyRect.right / static_cast<FLOAT>(desktopImageDesc.Width), dirtyRect.top / static_cast<FLOAT>(desktopImageDesc.Height) };
+            vertices[0].texCoord = bottomLeft;
+            vertices[1].texCoord = topLeft;
+            vertices[2].texCoord = bottomRight;
+            vertices[3].texCoord = vertices[2].texCoord;
+            vertices[4].texCoord = vertices[1].texCoord;
+            vertices[5].texCoord = topRight;
+            break;
+
+        case DXGI_MODE_ROTATION_ROTATE90:
+            vertices[0].texCoord = bottomRight;
+            vertices[1].texCoord = bottomLeft;
+            vertices[2].texCoord = topRight;
+            vertices[3].texCoord = vertices[2].texCoord;
+            vertices[4].texCoord = vertices[1].texCoord;
+            vertices[5].texCoord = topLeft;
+            break;
+
+        case DXGI_MODE_ROTATION_ROTATE180:
+            vertices[0].texCoord = topRight;
+            vertices[1].texCoord = bottomRight;
+            vertices[2].texCoord = topLeft;
+            vertices[3].texCoord = vertices[2].texCoord;
+            vertices[4].texCoord = vertices[1].texCoord;
+            vertices[5].texCoord = bottomLeft;
+            break;
+
+        case DXGI_MODE_ROTATION_ROTATE270:
+            vertices[0].texCoord = topLeft;
+            vertices[1].texCoord = topRight;
+            vertices[2].texCoord = bottomLeft;
+            vertices[3].texCoord = vertices[2].texCoord;
+            vertices[4].texCoord = vertices[1].texCoord;
+            vertices[5].texCoord = bottomRight;
             break;
 
         default:
             throw std::exception("render dirty rects with unimplemented rotation");
         }
 
-        // Set positions
-        vertices[0].pos = { (dirtyRect.left + desktopMonitorRect.left - offsetX - centerX) / static_cast<FLOAT>(centerX),
-            -1 * (dirtyRect.bottom + desktopMonitorRect.top - offsetY - centerY) / static_cast<FLOAT>(centerY),
+        // Set the vertices of the two triangles that make up the dirty rectangle
+        // The second triangle shares a side with the first triangle
+        // vertices proceed clockwise
+
+        // bottomLeft -> topLeft -> bottomRight
+        vertices[0].pos = { (rotatedRect.left + desktopBounds.left - offsetX - centerX) / static_cast<FLOAT>(centerX),
+            -1 * (rotatedRect.bottom + desktopBounds.top - offsetY - centerY) / static_cast<FLOAT>(centerY),
             0.0f };
-        vertices[1].pos = { (dirtyRect.left + desktopMonitorRect.left - offsetX - centerX) / static_cast<FLOAT>(centerX),
-            -1 * (dirtyRect.top + desktopMonitorRect.top - offsetY - centerY) / static_cast<FLOAT>(centerY),
+        vertices[1].pos = { (rotatedRect.left + desktopBounds.left - offsetX - centerX) / static_cast<FLOAT>(centerX),
+            -1 * (rotatedRect.top + desktopBounds.top - offsetY - centerY) / static_cast<FLOAT>(centerY),
             0.0f };
-        vertices[2].pos = { (dirtyRect.right + desktopMonitorRect.left - offsetX - centerX) / static_cast<FLOAT>(centerX),
-            -1 * (dirtyRect.bottom + desktopMonitorRect.top - offsetY - centerY) / static_cast<FLOAT>(centerY),
-            0.0f };
-        vertices[3].pos = vertices[2].pos;
-        vertices[4].pos = vertices[1].pos;
-        vertices[5].pos = { (dirtyRect.right + desktopMonitorRect.left - offsetX - centerX) / static_cast<FLOAT>(centerX),
-            -1 * (dirtyRect.top + desktopMonitorRect.top - offsetY - centerY) / static_cast<FLOAT>(centerY),
+        vertices[2].pos = { (rotatedRect.right + desktopBounds.left - offsetX - centerX) / static_cast<FLOAT>(centerX),
+            -1 * (rotatedRect.bottom + desktopBounds.top - offsetY - centerY) / static_cast<FLOAT>(centerY),
             0.0f };
 
-        vertices[3].texCoord = vertices[2].texCoord;
-        vertices[4].texCoord = vertices[1].texCoord;
+        // bottomRight -> topLeft -> topRight
+        vertices[3].pos = vertices[2].pos;
+        vertices[4].pos = vertices[1].pos;
+        vertices[5].pos = { (rotatedRect.right + desktopBounds.left - offsetX - centerX) / static_cast<FLOAT>(centerX),
+            -1 * (rotatedRect.top + desktopBounds.top - offsetY - centerY) / static_cast<FLOAT>(centerY),
+            0.0f };
     }
 }
 

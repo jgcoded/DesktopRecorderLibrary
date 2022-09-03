@@ -79,7 +79,7 @@ void PrintDevices()
     auto virtualDesktop = std::make_shared<VirtualDesktop>();
     std::vector<DesktopMonitor> desktopMonitors = virtualDesktop->GetAllDesktopMonitors();
 
-    auto virtualDesktopBounds = virtualDesktop->VirtualDesktopBounds();
+    auto virtualDesktopBounds = VirtualDesktop::CalculateDesktopMonitorBounds(desktopMonitors);
     JsonArray monitorList;
     int i = 0;
     for (const DesktopMonitor& monitor : desktopMonitors) {

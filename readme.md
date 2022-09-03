@@ -11,16 +11,17 @@ Here is a demo of what the app looked like, powered by this library:
 * GPU Accelerated video encoding to MP4
 * On-the-fly, GPU-based texture resizing
 * Multiple monitor support
-* Mic Capture
-* Mouse capture
+* Monitor rotation support
+* Microphone Audio Capture
+* Mouse capture and rendering
 
-## APIs used
+## Dependencies
 
-* Windows Desktop Duplication APIs
+* Windows Desktop Duplication
 * Windows Media Foundation
 * DirectX
-* A bunch of Win32 APIs
-* 
+* Win32
+
 ## Minimal example
 
 ```cpp

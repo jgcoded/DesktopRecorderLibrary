@@ -37,6 +37,8 @@ public:
 
     RECT VirtualDesktopBounds() const;
 
+    static RECT CalculateDesktopMonitorBounds(const std::vector<DesktopMonitor>& desktopMonitors);
+
     winrt::com_ptr<ID3D11Device> Device() const;
 
     std::unique_ptr<KeyedMutexLock> LockWithMutex(winrt::com_ptr<IDXGIKeyedMutex> keyedMutex) const;

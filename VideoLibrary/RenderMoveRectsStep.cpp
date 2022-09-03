@@ -54,7 +54,14 @@ void RenderMoveRectsStep::Perform()
 
     std::shared_ptr<VirtualDesktop> virtualDesktop = mFrame->VirtualDesktop();
     DXGI_OUTDUPL_MOVE_RECT* moveRects = mFrame->MoveRects();
-    auto desktopBounds = virtualDesktop->VirtualDesktopBounds();
+    const RECT virtualDesktopBounds = virtualDesktop->VirtualDesktopBounds();
+    const LONG offsetX = virtualDesktopBounds.left;
+    const LONG offsetY = virtualDesktopBounds.top;
+
+    D3D11_TEXTURE2D_DESC desktopImageDesc;
+    mFrame->DesktopImage()->GetDesc(&desktopImageDesc);
+    const LONG desktopWidth = (LONG)desktopImageDesc.Width;
+    const LONG desktopHeight = (LONG)desktopImageDesc.Height;
 
     winrt::com_ptr<ID3D11Device> device;
     mSharedSurface->GetDevice(device.put());
@@ -62,14 +69,10 @@ void RenderMoveRectsStep::Perform()
     winrt::com_ptr<ID3D11DeviceContext> context;
     device->GetImmediateContext(context.put());
 
-
     for (size_t i = 0; i < mFrame->MoveRectsCount(); ++i) {
         const DXGI_OUTDUPL_MOVE_RECT& moveRect = moveRects[i];
 
-        auto offsetX = desktopBounds.left;
-        auto offsetY = desktopBounds.top;
-
-        RECT srcRect, dstRect;
+        RECT srcRect{}, dstRect{};
 
         // set src and dstRect based on rotation of output device
         switch (mFrame->Rotation())
@@ -82,6 +85,43 @@ void RenderMoveRectsStep::Perform()
             srcRect.right = moveRect.SourcePoint.x + moveRect.DestinationRect.right - moveRect.DestinationRect.left;
             dstRect = moveRect.DestinationRect;
             break;
+
+        case DXGI_MODE_ROTATION_ROTATE90:
+            srcRect.left = desktopHeight - (moveRect.SourcePoint.y + moveRect.DestinationRect.bottom - moveRect.DestinationRect.top);
+            srcRect.top = moveRect.SourcePoint.x;
+            srcRect.right = desktopHeight - moveRect.SourcePoint.y;
+            srcRect.bottom = moveRect.SourcePoint.x + moveRect.DestinationRect.right - moveRect.DestinationRect.left;
+
+            dstRect.left = desktopHeight - moveRect.DestinationRect.bottom;
+            dstRect.top = moveRect.DestinationRect.left;
+            dstRect.right = desktopHeight - moveRect.DestinationRect.top;
+            dstRect.bottom = moveRect.DestinationRect.right;
+            break;
+
+        case DXGI_MODE_ROTATION_ROTATE180:
+            srcRect.left = desktopWidth - (moveRect.SourcePoint.x + moveRect.DestinationRect.right - moveRect.DestinationRect.left);
+            srcRect.top = desktopHeight - (moveRect.SourcePoint.y + moveRect.DestinationRect.bottom - moveRect.DestinationRect.top);
+            srcRect.right = desktopWidth - moveRect.SourcePoint.x;
+            srcRect.bottom = desktopHeight - moveRect.SourcePoint.y;
+
+            dstRect.left = desktopWidth - moveRect.DestinationRect.right;
+            dstRect.top = desktopHeight - moveRect.DestinationRect.bottom;
+            dstRect.right = desktopWidth - moveRect.DestinationRect.left;
+            dstRect.bottom = desktopHeight - moveRect.DestinationRect.top;
+            break;
+
+        case DXGI_MODE_ROTATION_ROTATE270:
+            srcRect.left = moveRect.SourcePoint.x;
+            srcRect.top = desktopWidth - (moveRect.SourcePoint.x + moveRect.DestinationRect.right - moveRect.DestinationRect.left);
+            srcRect.right = moveRect.SourcePoint.y + moveRect.DestinationRect.bottom - moveRect.DestinationRect.top;
+            srcRect.bottom = desktopWidth - moveRect.SourcePoint.x;
+
+            dstRect.left = moveRect.DestinationRect.top;
+            dstRect.top = desktopWidth - moveRect.DestinationRect.right;
+            dstRect.right = moveRect.DestinationRect.bottom;
+            dstRect.bottom = desktopWidth - moveRect.DestinationRect.left;
+            break;
+
         default:
             throw std::exception("Move rect rotation unimplemented");
         }

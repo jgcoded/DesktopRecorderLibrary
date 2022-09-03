@@ -81,7 +81,11 @@ void Pipeline::Perform()
         {
             if (mTexturePool == nullptr)
             {
-                mTexturePool = TexturePool::CreateFromFrame(*frame);
+                D3D11_TEXTURE2D_DESC desc;
+                mSharedSurface->GetDesc(&desc);
+                // Use the same device that was used to open the shared surface
+                // instead of the device used by Desktop Duplication API's desktop image.
+                mTexturePool.attach(new TexturePool(mDuplicator->Device(), desc));
                 winrt::check_pointer(mTexturePool.get());
             }
 

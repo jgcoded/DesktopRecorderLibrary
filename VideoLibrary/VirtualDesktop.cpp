@@ -23,9 +23,9 @@
 #include "VirtualDesktop.h"
 
 VirtualDesktop::VirtualDesktop()
-    : mVirtualDesktopBounds{ RECT{ INT_MAX, INT_MAX, INT_MIN, INT_MIN } }
-    , mDevice { DxResource::MakeDevice() }
+    : mDevice { DxResource::MakeDevice() }
     , mRotatingKeys { std::make_shared<RotatingKeys>() }
+    , mVirtualDesktopBounds { INT_MAX, INT_MAX, INT_MIN, INT_MIN }
 {
 }
 
@@ -92,11 +92,6 @@ std::vector<std::unique_ptr<DesktopMonitor::ScreenDuplicator>> VirtualDesktop::R
     return result;
 }
 
-RECT VirtualDesktop::VirtualDesktopBounds() const
-{
-    return mVirtualDesktopBounds;
-}
-
 winrt::com_ptr<ID3D11Device> VirtualDesktop::Device() const
 {
     return mDevice;
@@ -118,11 +113,11 @@ winrt::com_ptr<ID3D11Texture2D> VirtualDesktop::OpenSharedSurfaceWithDevice(winr
     return sharedSurface;
 }
 
-void VirtualDesktop::ResetSharedSurface()
+RECT VirtualDesktop::CalculateDesktopMonitorBounds(const std::vector<DesktopMonitor>& desktopMonitors)
 {
     // determine desktop bounds
     auto bounds = RECT{ INT_MAX, INT_MAX, INT_MIN, INT_MIN };
-    for (const auto& monitor : mDesktopMonitors)
+    for (const auto& monitor : desktopMonitors)
     {
         RECT monitorBounds = monitor.DesktopMonitorBounds();
         bounds.left = std::min(bounds.left, monitorBounds.left);
@@ -130,6 +125,20 @@ void VirtualDesktop::ResetSharedSurface()
         bounds.right = std::max(bounds.right, monitorBounds.right);
         bounds.bottom = std::max(bounds.bottom, monitorBounds.bottom);
     }
+
+    return bounds;
+}
+
+RECT VirtualDesktop::VirtualDesktopBounds() const
+{
+    assert(mDesktopMonitors.size() > 0);
+    return mVirtualDesktopBounds;
+}
+
+void VirtualDesktop::ResetSharedSurface()
+{
+    // determine desktop bounds
+    auto bounds = CalculateDesktopMonitorBounds(mDesktopMonitors);
 
     auto width = bounds.right - bounds.left;
     auto height = bounds.bottom - bounds.top;

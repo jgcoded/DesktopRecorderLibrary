@@ -24,19 +24,6 @@
 #include "VirtualDesktop.h"
 #include "TexturePool.h"
 
-winrt::com_ptr<TexturePool> TexturePool::CreateFromFrame(DesktopMonitor::ScreenDuplicator::Frame& frame)
-{
-    winrt::com_ptr<ID3D11Device> device;
-    frame.DesktopImage()->GetDevice(device.put());
-    D3D11_TEXTURE2D_DESC desc;
-    frame.DesktopImage()->GetDesc(&desc);
-
-    winrt::com_ptr<TexturePool> pool;
-    pool.attach(new TexturePool{ device, desc });
-
-    return pool;
-}
-
 TexturePool::TexturePool(winrt::com_ptr<ID3D11Device> device, const D3D11_TEXTURE2D_DESC desc)
     : mDevice{ device }
     , mTextureDesc{ desc }

@@ -26,8 +26,6 @@ class TexturePool : public IMFAsyncCallback, public RefCountedObject
 {
 public:
 
-    static winrt::com_ptr<TexturePool> CreateFromFrame(DesktopMonitor::ScreenDuplicator::Frame& frame);
-
     TexturePool(winrt::com_ptr<ID3D11Device> device, D3D11_TEXTURE2D_DESC desc);
 
     winrt::com_ptr<ID3D11Texture2D> Acquire();
