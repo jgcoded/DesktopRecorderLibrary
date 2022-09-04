@@ -20,9 +20,8 @@
 #pragma once
 
 #include "DesktopMonitor.h"
-#include "RefCountedObject.h"
 
-class TexturePool : public IMFAsyncCallback, public RefCountedObject
+class TexturePool : public IMFAsyncCallback
 {
 public:
 
@@ -34,9 +33,20 @@ public:
 
     virtual HRESULT STDMETHODCALLTYPE Invoke(IMFAsyncResult* pAsyncResult) override;
 
-    STDMETHODIMP_(ULONG) AddRef() { return RefCountedObject::AddRef(); }
-    STDMETHODIMP_(ULONG) Release() { return RefCountedObject::Release(); }
+    STDMETHODIMP_(ULONG) AddRef() { return InterlockedIncrement(&m_refCount); }
+    STDMETHODIMP_(ULONG) Release()
+    {
+        assert(m_refCount > 0);
+        ULONG uCount = InterlockedDecrement(&m_refCount);
+        if (uCount == 0)
+        {
+            delete this;
+        }
+        return uCount;
+    }
     virtual HRESULT QueryInterface(REFIID riid, void** ppv) noexcept override;
+
+    virtual ~TexturePool();
 
 private:
 
@@ -46,4 +56,6 @@ private:
     const D3D11_TEXTURE2D_DESC mTextureDesc;
     std::queue<winrt::com_ptr<ID3D11Texture2D>> mTexturePool;
     std::mutex mMutex;
+    volatile long   m_refCount;
+
 };

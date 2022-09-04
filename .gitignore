@@ -266,3 +266,6 @@ __pycache__/
 **/package-lock.json
 **/*.appxbundle
 *.mp4
+
+**/VertexShader.h
+**/PixelShader.h

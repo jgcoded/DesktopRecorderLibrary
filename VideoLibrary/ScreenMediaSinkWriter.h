@@ -38,7 +38,7 @@ public:
 
     void End();
 
-    ~ScreenMediaSinkWriter();
+    virtual ~ScreenMediaSinkWriter();
 
 private:
     winrt::com_ptr<IMFSinkWriter> mSinkWriter;
@@ -55,7 +55,6 @@ private:
     bool mIsWriting;
     std::chrono::high_resolution_clock::time_point mWriteStartTime;
     UINT32 mVideoFrameDuration;
-    bool mComAlreadyLoaded;
 
     std::mutex mMutex;
 };

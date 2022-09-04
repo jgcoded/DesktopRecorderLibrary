@@ -26,9 +26,9 @@ void EnableDebugOnDevice(winrt::com_ptr<ID3D11Device> device)
     winrt::com_ptr<ID3D11InfoQueue> info{ debug.as<ID3D11InfoQueue>() };
     info->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_CORRUPTION, true);
     info->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_ERROR, true);
-    info->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_WARNING, true);
-    info->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_INFO, true);
-    info->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_MESSAGE, true);
+    //info->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_WARNING, true);
+    //info->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_INFO, true);
+    //info->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_MESSAGE, true);
     info->SetMuteDebugOutput(false);
 }
 

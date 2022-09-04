@@ -29,13 +29,16 @@ AsyncMediaSourceReader::AsyncMediaSourceReader(
     DWORD streamIndex)
     : mSource{ mediaSource }
     , mCallback{ callback }
-    , mSamplingDelayMs { samplingDelayMs }
+    , mSamplingDelayMs{ samplingDelayMs }
     , mStreamIndex{ streamIndex }
+    , m_refCount{ 1 }
 {
 }
 
 AsyncMediaSourceReader::~AsyncMediaSourceReader()
 {
+    assert(m_refCount == 0);
+
     if (!mStopping)
     {
         this->Stop();
@@ -52,7 +55,7 @@ void AsyncMediaSourceReader::Start()
 
     winrt::check_hresult(attributes->SetUnknown(MF_SOURCE_READER_ASYNC_CALLBACK, unk.get()));
 
-    auto source = mSource.as<IMFMediaSource>();
+    winrt::com_ptr<IMFMediaSource> source = mSource.as<IMFMediaSource>();
     winrt::check_hresult(MFCreateSourceReaderFromMediaSource(source.get(), attributes.get(), mReader.put()));
 
     winrt::check_hresult(mReader->SetStreamSelection(

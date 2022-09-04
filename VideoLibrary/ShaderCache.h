@@ -24,7 +24,7 @@ public:
 
     ShaderCache(winrt::com_ptr<ID3D11Device> device);
 
-    ~ShaderCache();
+    virtual ~ShaderCache();
 
     winrt::com_ptr<ID3D11VertexShader> VertexShader();
 

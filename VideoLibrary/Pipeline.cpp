@@ -81,12 +81,7 @@ void Pipeline::Perform()
         {
             if (mTexturePool == nullptr)
             {
-                D3D11_TEXTURE2D_DESC desc;
-                mSharedSurface->GetDesc(&desc);
-                // Use the same device that was used to open the shared surface
-                // instead of the device used by Desktop Duplication API's desktop image.
-                mTexturePool.attach(new TexturePool(mDuplicator->Device(), desc));
-                winrt::check_pointer(mTexturePool.get());
+                AllocateTexturePool();
             }
 
             if (mStagingTexture == nullptr)
@@ -95,11 +90,7 @@ void Pipeline::Perform()
                 frame->DesktopImage()->GetDesc(&stagingDesc);
                 stagingDesc.BindFlags = D3D11_BIND_RENDER_TARGET;
                 stagingDesc.MiscFlags = 0;
-
-                winrt::check_hresult(device->CreateTexture2D(
-                    &stagingDesc,
-                    nullptr,
-                    mStagingTexture.put()));
+                AllocateStagingTexture(device, stagingDesc);
             }
 
             RenderMoveRectsStep renderMoves{ frame, mStagingTexture, mSharedSurface };
@@ -143,4 +134,22 @@ void Pipeline::Perform()
 winrt::com_ptr<IMFSample> Pipeline::Sample() const
 {
     return mSample;
+}
+
+void Pipeline::AllocateTexturePool()
+{
+    D3D11_TEXTURE2D_DESC desc;
+    mSharedSurface->GetDesc(&desc);
+    // Use the same device that was used to open the shared surface
+    // instead of the device used by Desktop Duplication API's desktop image.
+    mTexturePool.attach(new TexturePool(mDuplicator->Device(), desc));
+    winrt::check_pointer(mTexturePool.get());
+}
+
+void Pipeline::AllocateStagingTexture(winrt::com_ptr<ID3D11Device> device, const D3D11_TEXTURE2D_DESC& desc)
+{
+    winrt::check_hresult(device->CreateTexture2D(
+        &desc,
+        nullptr,
+        mStagingTexture.put()));
 }

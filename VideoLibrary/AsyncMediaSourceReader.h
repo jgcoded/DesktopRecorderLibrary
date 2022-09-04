@@ -19,9 +19,7 @@
 
 #pragma once
 
-#include "RefCountedObject.h"
-
-class AsyncMediaSourceReader : public IMFSourceReaderCallback, public RefCountedObject
+class AsyncMediaSourceReader : public IMFSourceReaderCallback
 {
 public:
 
@@ -31,7 +29,7 @@ public:
         int desiredFrameRate,
         DWORD streamIndex);
 
-    ~AsyncMediaSourceReader();
+    virtual ~AsyncMediaSourceReader();
 
     virtual void Start();
     virtual void Stop();
@@ -45,8 +43,17 @@ public:
      
     virtual HRESULT __stdcall OnStreamError(DWORD dwStreamIndex, HRESULT hrStatus) noexcept;
 
-     STDMETHODIMP_(ULONG) AddRef() { return RefCountedObject::AddRef(); }
-     STDMETHODIMP_(ULONG) Release() { return RefCountedObject::Release(); }
+     STDMETHODIMP_(ULONG) AddRef() { return InterlockedIncrement(&m_refCount); }
+     STDMETHODIMP_(ULONG) Release()
+     {
+         assert(m_refCount > 0);
+         ULONG uCount = InterlockedDecrement(&m_refCount);
+         if (uCount == 0)
+         {
+             delete this;
+         }
+         return uCount;
+     }
      virtual HRESULT QueryInterface(REFIID riid, void** ppv) noexcept override;
 
 private:
@@ -81,4 +88,5 @@ private:
     //std::function<void(winrt::com_ptr<IMFSample>)> mCallback;
     std::function<void(IMFSample*, HRESULT)> mCallback;
 
+    volatile long   m_refCount;
 };

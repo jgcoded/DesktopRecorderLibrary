@@ -12,9 +12,6 @@
     <Filter Include="Recording Steps">
       <UniqueIdentifier>{765a2b4c-d921-4320-ac55-00a5cb151103}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Video">
-      <UniqueIdentifier>{932dfe58-63b3-4b92-95ad-c78bda395b62}</UniqueIdentifier>
-    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h">
@@ -53,9 +50,6 @@
     <ClInclude Include="TexturePool.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="RefCountedObject.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="EncodingContext.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -84,6 +78,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ShaderCache.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Vertex.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -145,5 +142,13 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="PixelShader.hlsl">
+      <Filter>Source Files</Filter>
+    </FxCompile>
+    <FxCompile Include="VertexShader.hlsl">
+      <Filter>Source Files</Filter>
+    </FxCompile>
   </ItemGroup>
 </Project>

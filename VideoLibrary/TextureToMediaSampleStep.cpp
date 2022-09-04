@@ -52,9 +52,6 @@ void TextureToMediaSampleStep::Perform()
 
     auto trackedSample = mSample.as<IMFTrackedSample>();
 
-    // Internally, the videoSample will call Release() on the texture pool
-    // so AddRef() to avoid the texture pool deleting itself
-    mTexturePool->AddRef();
     winrt::check_hresult(trackedSample->SetAllocator(mTexturePool.get(), trackedSample.get()));
 
     winrt::check_hresult(mSample->AddBuffer(mediaBuffer.get()));

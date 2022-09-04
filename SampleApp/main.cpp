@@ -113,16 +113,13 @@ void PrintDevices()
     devicesObject.Insert(L"microphones", microphoneList);
 
     std::wstring output{ devicesObject.Stringify() };
-    wcout << output << endl;
+    std::wcout << output << endl;
 }
 
-void PipelineThread(
-    std::shared_ptr<DesktopMonitor::ScreenDuplicator> duplicator,
-    std::function<void(IMFSample* sample)> sampleCallback,
-    std::function<void(HRESULT hr)> errorCallback,
-    std::shared_ptr<std::atomic_bool> stop,
-    int frameRate)
+void SetupPipelineThread(std::shared_ptr<std::atomic_bool> stop, std::shared_ptr<std::atomic<HRESULT>> threadHResult)
 {
+    (void)SetThreadDescription(GetCurrentThread(), L"RecordingThread");
+
     {
         const auto startTime = std::chrono::high_resolution_clock::now();
         while (!stop->load())
@@ -142,54 +139,25 @@ void PipelineThread(
                 const auto now = std::chrono::high_resolution_clock::now();
                 if (std::chrono::duration_cast<std::chrono::seconds>(startTime - now) > std::chrono::seconds{ 3 })
                 {
+                    threadHResult->store(winrt::to_hresult());
                     stop->store(true);
-                    errorCallback(winrt::to_hresult());
                 }
             }
         }
     }
+}
 
-    std::unique_ptr<Pipeline> duplicationPipeline = std::make_unique<Pipeline>(duplicator);
+void PipelineThread(
+    JsonObject data,
+    std::shared_ptr<std::atomic_bool> stop,
+    std::shared_ptr<std::atomic<HRESULT>> threadHResult)
+{
+    SetupPipelineThread(stop, threadHResult);
 
-    while (!stop->load())
+    if (stop->load())
     {
-        try
-        {
-            (void)SetThreadExecutionState(ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED);
-            duplicationPipeline->Perform();
-            if (duplicationPipeline->Sample())
-            {
-                sampleCallback(duplicationPipeline->Sample().get());
-            }
-            Sleep(1000 / frameRate);
-        }
-        catch (...)
-        {
-            errorCallback(winrt::to_hresult());
-            stop->store(true);
-        }
+        return;
     }
-
-    winrt::com_ptr<ID3D11DeviceContext> context;
-    duplicator->Device()->GetImmediateContext(context.put());
-    context->ClearState();
-    context->Flush();
-}
-
-std::atomic stopRecordingByUser = false;
-BOOL CtrlHandler(DWORD)
-{
-    stopRecordingByUser = true;
-    return TRUE;
-}
-
-void StartRecording(JsonObject data)
-{
-    auto virtualDesktop = std::make_shared<VirtualDesktop>();
-#if _DEBUG
-    auto debug = virtualDesktop->Device().as<ID3D11Debug>();
-#endif
-    std::vector<DesktopMonitor> desktopMonitors = virtualDesktop->GetAllDesktopMonitors();
 
     JsonObject settings = data.Lookup(L"settings").GetObjectW();
     hstring fileName = settings.Lookup(L"filename").GetString();
@@ -200,15 +168,12 @@ void StartRecording(JsonObject data)
     int frameRate = (int)settings.Lookup(L"framerate").GetNumber();
     int bitRate = (int)settings.Lookup(L"bitrate").GetNumber();
 
-    check_hresult(MFStartup(MF_VERSION));
+    auto virtualDesktop = std::make_shared<VirtualDesktop>();
 
-    init_apartment();
-
-    // record!
-    std::unique_ptr<DesktopMonitor::ScreenDuplicator> duplicator = std::move(virtualDesktop->RecordMonitor(desktopMonitors[monitorIndex]));
+    std::vector<DesktopMonitor> desktopMonitors = virtualDesktop->GetAllDesktopMonitors();
+    std::shared_ptr<DesktopMonitor::ScreenDuplicator> duplicator = std::move(virtualDesktop->RecordMonitor(desktopMonitors[monitorIndex]));
 
     com_ptr<IMFMediaType> videoMediaType = GetMediaTypeFromDuplicator(*duplicator);
-
     com_ptr<IMFMediaSource> audioMediaSource;
     com_ptr<IMFMediaType> audioMediaType;
 
@@ -218,81 +183,29 @@ void StartRecording(JsonObject data)
         audioMediaType = GetMediaTypeFromMediaSource(audioMediaSource);
     }
 
-    std::wstring fileNameW{ fileName };
+    std::unique_ptr<ScreenMediaSinkWriter> writer;
+    {
+        std::wstring fileNameW{ fileName };
+        EncodingContext encodingContext{};
+        encodingContext.fileName = fileNameW;
+        encodingContext.resolutionOption = resolutionOption;
+        encodingContext.audioQuality = audioQuality;
+        encodingContext.frameRate = frameRate;
+        encodingContext.bitRate = bitRate;
+        encodingContext.videoInputMediaType = videoMediaType;
+        encodingContext.audioInputMediaType = audioMediaType;
+        encodingContext.device = duplicator->Device();
 
-    EncodingContext encodingContext{};
-    encodingContext.fileName = fileNameW;
-    encodingContext.resolutionOption = resolutionOption;
-    encodingContext.audioQuality = audioQuality;
-    encodingContext.frameRate = frameRate;
-    encodingContext.bitRate = bitRate;
-    encodingContext.videoInputMediaType = videoMediaType;
-    encodingContext.audioInputMediaType = audioMediaType;
-    encodingContext.device = duplicator->Device();
-
-    auto writer = std::make_unique<ScreenMediaSinkWriter>(encodingContext);
+        writer = std::make_unique<ScreenMediaSinkWriter>(encodingContext);
+    }
 
     winrt::com_ptr<AsyncMediaSourceReader> audioReader;
-    std::shared_ptr<std::atomic_bool> stopThread{ new std::atomic_bool{false} };
-    std::thread pipelineThread;
 
-    auto shutdownCallback = [&](HRESULT reason) {
-
-        if (audioReader)
-        {
-            audioReader->Stop();
-        }
-
-        stopThread->store(true);
-
-        if (stopRecordingByUser && pipelineThread.joinable())
-        {
-            pipelineThread.join();
-        }
-
-        if (audioReader)
-        {
-            audioReader = nullptr;
-        }
-
-        writer->End();
-
-        writer.reset(nullptr);
-
-        winrt::check_hresult(MFShutdown());
-
-        desktopMonitors.clear();
-
-        winrt::com_ptr<ID3D11DeviceContext> context;
-        virtualDesktop->Device()->GetImmediateContext(context.put());
-        context->ClearState();
-        context->Flush();
-
-        virtualDesktop.reset();
-
-        if (!stopRecordingByUser)
-        {
-            // unexpected shutdown
-            exit(reason);
-        }
-    };
-
-    auto videoCallback = [&writer, &shutdownCallback](IMFSample* sample)
-    {
-        if (sample == nullptr)
-        {
-            shutdownCallback(E_POINTER);
-        }
-
-        sample->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
-        writer->WriteSample(sample);
-    };
-
-    auto audioCallback = [&writer, &shutdownCallback](IMFSample* sample, HRESULT hr)
+    auto audioCallback = [&writer, &stop](IMFSample* sample, HRESULT hr)
     {
         if (sample == nullptr && FAILED(hr))
         {
-            shutdownCallback(hr);
+            stop->store(true);
         }
 
         sample->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Audio);
@@ -310,69 +223,168 @@ void StartRecording(JsonObject data)
 
     writer->Begin();
 
-    pipelineThread = std::thread{
-        PipelineThread,
-        std::move(duplicator),
-        videoCallback,
-        shutdownCallback,
-        stopThread,
-        frameRate};
-
     if (audioReader)
     {
         audioReader->Start();
     }
 
+    // Enable away mode and prevent display and system idle timeouts
+    (void)SetThreadExecutionState(ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED | ES_AWAYMODE_REQUIRED | ES_CONTINUOUS);
+
+    std::unique_ptr<Pipeline> duplicationPipeline = std::make_unique<Pipeline>(duplicator);
+
+    while (!stop->load())
+    {
+        try
+        {
+            duplicationPipeline->Perform();
+            winrt::com_ptr<IMFSample> sample = duplicationPipeline->Sample();
+
+            if (duplicationPipeline->Sample())
+            {
+                sample->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
+                writer->WriteSample(sample.get());
+            }
+            Sleep(1000 / frameRate);
+        }
+        catch (...)
+        {
+            threadHResult->store(winrt::to_hresult());
+            stop->store(true);
+        }
+    }
+    // Disable away mode
+    (void)SetThreadExecutionState(ES_CONTINUOUS);
+
+
+    // clear resources
+    {
+        if (audioReader)
+        {
+            audioReader->Stop();
+            audioReader = nullptr;
+        }
+
+        writer->End();
+
+        writer.reset(nullptr);
+
+        desktopMonitors.clear();
+
+        {
+            auto device = duplicator->Device();
+            duplicator.reset();
+
+            winrt::com_ptr<ID3D11DeviceContext> context;
+            device->GetImmediateContext(context.put());
+            context->ClearState();
+            context->Flush();
+
+#if _DEBUG
+            auto debug = device.as<ID3D11Debug>();
+            debug->ReportLiveDeviceObjects(D3D11_RLDO_DETAIL);
+#endif
+        }
+
+        {
+            auto device = virtualDesktop->Device();
+            virtualDesktop.reset();
+
+            winrt::com_ptr<ID3D11DeviceContext> context;
+            device->GetImmediateContext(context.put());
+            context->ClearState();
+            context->Flush();
+
+#if _DEBUG
+            auto debug = device.as<ID3D11Debug>();
+            debug->ReportLiveDeviceObjects(D3D11_RLDO_DETAIL);
+#endif
+        }
+    }
+}
+
+std::atomic stopRecordingByUser = false;
+BOOL CtrlHandler(DWORD)
+{
+    stopRecordingByUser = true;
+    return TRUE;
+}
+
+void StartRecording(JsonObject data)
+{
+    std::shared_ptr<std::atomic_bool> stopThread{ new std::atomic_bool{ false } };
+    std::shared_ptr<std::atomic<HRESULT>> threadHResult{ new std::atomic<HRESULT>{ S_OK } };
+
+    std::thread pipelineThread = std::thread{
+        PipelineThread,
+        data,
+        stopThread,
+        threadHResult,
+    };
+
     winrt::check_bool(SetConsoleCtrlHandler(&CtrlHandler, TRUE));
 
-    while (!stopRecordingByUser) {
+    while (!stopRecordingByUser && !stopThread->load())
+    {
         Sleep(100);
     }
 
-    shutdownCallback(S_OK);
+    stopThread->store(true);
 
-#if _DEBUG
-    if (debug)
+    if (pipelineThread.joinable())
     {
-        debug->ReportLiveDeviceObjects(D3D11_RLDO_DETAIL);
+        pipelineThread.join();
     }
-#endif
 }
 
 int main()
 {
-    PrintDevices();
-    cout << endl << endl;
+    check_hresult(MFStartup(MF_VERSION));
 
-    auto audioRecordingDevices = AudioMedia::GetAudioRecordingDevices();
-    hstring audioEndpoint = L"";
-    if (!audioRecordingDevices.empty())
+    init_apartment();
+
     {
-        audioEndpoint = audioRecordingDevices.front().endpoint;
-        wcout << "Using Audio Endpoint: " << audioEndpoint.c_str() << endl;
+        PrintDevices();
+        cout << endl << endl;
+
+        auto audioRecordingDevices = AudioMedia::GetAudioRecordingDevices();
+        hstring audioEndpoint = L"";
+        if (!audioRecordingDevices.empty())
+        {
+            audioEndpoint = audioRecordingDevices.front().endpoint;
+            std::wcout << "Using Audio Endpoint: " << audioEndpoint.c_str() << endl;
+        }
+        else
+        {
+            std::wcout << "No audio recording devices found" << endl;
+        }
+
+        int fileNumber = 0;
+        while (!stopRecordingByUser)
+        {
+            std::wstringstream ss;
+            ss << "test-recording-" << fileNumber++ << ".mp4";
+            hstring filename{ ss.str() };
+            std::wcout << L"Saving recording as file: " << filename.c_str() << endl;
+
+            JsonObject settings;
+            settings.Insert(L"filename", JsonValue::CreateStringValue(filename));
+            settings.Insert(L"monitor", JsonValue::CreateNumberValue(0));
+            settings.Insert(L"audioEndpoint", JsonValue::CreateStringValue(audioEndpoint));
+            settings.Insert(L"resolutionOption", JsonValue::CreateNumberValue((int)ResolutionOption::Auto));
+            settings.Insert(L"audioQuality", JsonValue::CreateNumberValue((int)AudioQuality::Auto));
+            settings.Insert(L"framerate", JsonValue::CreateNumberValue(30));
+            settings.Insert(L"bitrate", JsonValue::CreateNumberValue(9000000));
+
+            JsonObject object;
+            object.Insert(L"settings", settings);
+            object.Insert(L"command", JsonValue::CreateStringValue(L"startrecording"));
+
+            StartRecording(object);
+        }
     }
-    else
-    {
-        wcout << "No audio recording devices found" << endl;
-    }
 
-    hstring filename = L"test-recording.mp4";
-    wcout << L"Saving recording as file: " << filename.c_str() << endl;
-
-    JsonObject settings;
-    settings.Insert(L"filename", JsonValue::CreateStringValue(filename));
-    settings.Insert(L"monitor", JsonValue::CreateNumberValue(0));
-    settings.Insert(L"audioEndpoint", JsonValue::CreateStringValue(audioEndpoint));
-    settings.Insert(L"resolutionOption", JsonValue::CreateNumberValue((int)ResolutionOption::Auto));
-    settings.Insert(L"audioQuality", JsonValue::CreateNumberValue((int)AudioQuality::Auto));
-    settings.Insert(L"framerate", JsonValue::CreateNumberValue(30));
-    settings.Insert(L"bitrate", JsonValue::CreateNumberValue(9000000));
-
-    JsonObject object;
-    object.Insert(L"settings", settings);
-    object.Insert(L"command", JsonValue::CreateStringValue(L"startrecording"));
-
-    StartRecording(object);
+    winrt::check_hresult(MFShutdown());
 
     return 0;
 }

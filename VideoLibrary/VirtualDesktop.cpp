@@ -105,7 +105,7 @@ std::unique_ptr<KeyedMutexLock> VirtualDesktop::LockWithMutex(winrt::com_ptr<IDX
 winrt::com_ptr<ID3D11Texture2D> VirtualDesktop::OpenSharedSurfaceWithDevice(winrt::com_ptr<ID3D11Device> device)
 {
     HANDLE handle = nullptr;
-    auto resource = mSharedSurface.as<IDXGIResource>();
+    winrt::com_ptr<IDXGIResource> resource = mSharedSurface.as<IDXGIResource>();
     winrt::check_hresult(resource->GetSharedHandle(&handle));
 
     winrt::com_ptr<ID3D11Texture2D> sharedSurface;

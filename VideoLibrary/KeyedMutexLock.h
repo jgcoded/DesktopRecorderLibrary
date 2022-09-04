@@ -44,9 +44,11 @@ public:
         return mReleaseKey;
     }
 
-    RotatingKeys Rotate() const
+    void Rotate()
     {
-        return RotatingKeys{ mReleaseKey, mAcquireKey };
+        auto previousRelease = mReleaseKey;
+        mReleaseKey = mAcquireKey;
+        mAcquireKey = previousRelease;
     }
 
 private:
@@ -84,8 +86,9 @@ public:
 
     ~KeyedMutexLock()
     {
-        winrt::check_hresult(mMutex->ReleaseSync(mRotatingKeys->ReleaseKey()));
-        *mRotatingKeys = mRotatingKeys->Rotate();
+        auto releaseKey = mRotatingKeys->ReleaseKey();
+        mRotatingKeys->Rotate();
+        winrt::check_hresult(mMutex->ReleaseSync(releaseKey));
     }
 
     bool Locked() const { return mLocked; }

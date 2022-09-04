@@ -29,6 +29,7 @@ ScreenMediaSinkWriter::ScreenMediaSinkWriter(const EncodingContext& encodingCont
     , mIsWriting{ false }
     , mWriteStartTime{ std::chrono::nanoseconds{ MAXLONGLONG } }
     , mDevice{ encodingContext.device }
+    , mAudioStreamIndex { 0 }
 {
     auto mediaEncodingProfile = MediaEncodingProfile::CreateMp4(encodingContext.resolutionOption);
 
@@ -213,9 +214,14 @@ void ScreenMediaSinkWriter::End()
     std::lock_guard<std::mutex> lock{ mMutex };
 
     if (!mIsWriting) {
-        throw std::bad_function_call();
+        throw std::exception("End called when ScreenMediaSinkWriter was not writing");
     }
 
+    winrt::check_hresult(mSinkWriter->Flush(mVideoStreamIndex));
+    if (mAudioInputMediaType)
+    {
+        winrt::check_hresult(mSinkWriter->Flush(mAudioStreamIndex));
+    }
     winrt::check_hresult(mSinkWriter->Finalize());
     mIsWriting = false;
 }

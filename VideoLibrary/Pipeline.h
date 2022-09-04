@@ -22,7 +22,7 @@
 #include "TexturePool.h"
 #include "DesktopMonitor.h"
 #include "DesktopPointer.h"
-#include "../Common/Vertex.h"
+#include "Vertex.h"
 #include "ShaderCache.h"
 
 class Pipeline : public RecordingStep
@@ -32,7 +32,7 @@ public:
         std::shared_ptr<DesktopMonitor::ScreenDuplicator> duplicator
     );
 
-    ~Pipeline();
+    virtual ~Pipeline();
 
     // Inherited via RecordingStep
     virtual void Perform() override;
@@ -40,6 +40,10 @@ public:
     winrt::com_ptr<IMFSample> Sample() const;
 
 private:
+
+    void AllocateTexturePool();
+    void AllocateStagingTexture(winrt::com_ptr<ID3D11Device> device, const D3D11_TEXTURE2D_DESC& desc);
+
     std::shared_ptr<DesktopMonitor::ScreenDuplicator> mDuplicator;
     std::shared_ptr<ShaderCache> mShaderCache;
     std::shared_ptr<std::vector<Vertex>> mVertexBuffer;

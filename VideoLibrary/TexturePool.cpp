@@ -27,6 +27,7 @@
 TexturePool::TexturePool(winrt::com_ptr<ID3D11Device> device, const D3D11_TEXTURE2D_DESC desc)
     : mDevice{ device }
     , mTextureDesc{ desc }
+    , m_refCount{ 1 }
 {
 }
 
@@ -90,4 +91,9 @@ HRESULT TexturePool::QueryInterface(REFIID riid, void** ppv) noexcept
         { 0 }
     };
     return QISearch(this, qit, riid, ppv);
+}
+
+TexturePool::~TexturePool()
+{
+    assert(m_refCount == 0);
 }
