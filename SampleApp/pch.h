@@ -58,3 +58,5 @@
 #include "VideoLibrary\ScreenMediaSinkWriter.h"
 #include "VideoLibrary\AudioMedia.h"
 #include "VideoLibrary\Errors.h"
+
+#include "WindowFactory.h"

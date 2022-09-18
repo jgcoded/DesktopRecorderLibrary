@@ -74,11 +74,8 @@ winrt::com_ptr<IMFMediaType> GetMediaTypeFromDuplicator(DesktopMonitor::ScreenDu
     return mediaType;
 }
 
-void PrintDevices()
+void PrintDevices(const std::vector<DesktopMonitor>& desktopMonitors, const std::vector<AudioDevice>& audioDevices)
 {
-    auto virtualDesktop = std::make_shared<VirtualDesktop>();
-    std::vector<DesktopMonitor> desktopMonitors = virtualDesktop->GetAllDesktopMonitors();
-
     auto virtualDesktopBounds = VirtualDesktop::CalculateDesktopMonitorBounds(desktopMonitors);
     JsonArray monitorList;
     int i = 0;
@@ -98,8 +95,7 @@ void PrintDevices()
     }
 
     JsonArray microphoneList;
-    auto audioRecordingDevices = AudioMedia::GetAudioRecordingDevices();
-    for (const auto& audioInput : audioRecordingDevices)
+    for (const auto& audioInput : audioDevices)
     {
         JsonObject audioObject;
         audioObject.Insert(L"name", JsonValue::CreateStringValue(audioInput.friendlyName));
@@ -152,6 +148,9 @@ void PipelineThread(
     std::shared_ptr<std::atomic_bool> stop,
     std::shared_ptr<std::atomic<HRESULT>> threadHResult)
 {
+    check_hresult(MFStartup(MF_VERSION));
+    init_apartment();
+
     SetupPipelineThread(stop, threadHResult);
 
     if (stop->load())
@@ -256,7 +255,6 @@ void PipelineThread(
     // Disable away mode
     (void)SetThreadExecutionState(ES_CONTINUOUS);
 
-
     // clear resources
     {
         if (audioReader)
@@ -301,87 +299,183 @@ void PipelineThread(
 #endif
         }
     }
+
+    winrt::check_hresult(MFShutdown());
 }
 
-std::atomic stopRecordingByUser = false;
-BOOL CtrlHandler(DWORD)
+JsonObject MakeRecordCommand(hstring fileName, size_t monitorIndex)
 {
-    stopRecordingByUser = true;
-    return TRUE;
+    auto audioRecordingDevices = AudioMedia::GetAudioRecordingDevices();
+    hstring audioEndpoint = L"";
+    if (!audioRecordingDevices.empty())
+    {
+        audioEndpoint = audioRecordingDevices.front().endpoint;
+    }
+
+    JsonObject settings;
+    settings.Insert(L"filename", JsonValue::CreateStringValue(fileName));
+    settings.Insert(L"monitor", JsonValue::CreateNumberValue((double)monitorIndex));
+    settings.Insert(L"audioEndpoint", JsonValue::CreateStringValue(audioEndpoint));
+    settings.Insert(L"resolutionOption", JsonValue::CreateNumberValue((int)ResolutionOption::Auto));
+    settings.Insert(L"audioQuality", JsonValue::CreateNumberValue((int)AudioQuality::Auto));
+    settings.Insert(L"framerate", JsonValue::CreateNumberValue(30));
+    settings.Insert(L"bitrate", JsonValue::CreateNumberValue(9000000));
+
+    JsonObject object;
+    object.Insert(L"settings", settings);
+    object.Insert(L"command", JsonValue::CreateStringValue(L"startrecording"));
+
+    return object;
 }
 
-void StartRecording(JsonObject data)
+struct RecordingContext
 {
-    std::shared_ptr<std::atomic_bool> stopThread{ new std::atomic_bool{ false } };
-    std::shared_ptr<std::atomic<HRESULT>> threadHResult{ new std::atomic<HRESULT>{ S_OK } };
+    std::shared_ptr<std::atomic_bool> stopThread;
+    std::shared_ptr<std::atomic<HRESULT>> stopThreadResult;
+    std::shared_ptr<std::atomic_bool> stopRecordingByUser;
+    std::shared_ptr<BorderWindow> borderWindow;
+    std::thread pipelineThread;
 
-    std::thread pipelineThread = std::thread{
+    ~RecordingContext()
+    {
+        if (stopThread)
+        {
+            stopThread->store(true);
+        }
+
+        if (pipelineThread.joinable())
+        {
+            pipelineThread.join();
+        }
+    }
+};
+
+std::unique_ptr<RecordingContext> StartRecording(hstring filename, size_t monitorIndex, RECT monitorBounds, WindowFactory<BorderWindow>& windowFactory)
+{
+    std::unique_ptr<RecordingContext> recordingThread{ new RecordingContext{} };
+    recordingThread->stopThread.reset(new atomic_bool{ false });
+    recordingThread->stopThreadResult.reset(new atomic<HRESULT>{ S_OK });
+    recordingThread->stopRecordingByUser.reset(new atomic_bool{ false });
+    recordingThread->borderWindow = std::move(windowFactory.NewWindow());
+
+    recordingThread->borderWindow->SizeAndPosition(
+        monitorBounds.left,
+        monitorBounds.top,
+        monitorBounds.right - monitorBounds.left + 1,
+        monitorBounds.bottom - monitorBounds.top + 1
+    );
+
+    JsonObject data = MakeRecordCommand(filename, monitorIndex);
+
+    recordingThread->pipelineThread = std::thread {
         PipelineThread,
         data,
-        stopThread,
-        threadHResult,
+        recordingThread->stopThread,
+        recordingThread->stopThreadResult
     };
 
-    winrt::check_bool(SetConsoleCtrlHandler(&CtrlHandler, TRUE));
-
-    while (!stopRecordingByUser && !stopThread->load())
-    {
-        Sleep(100);
-    }
-
-    stopThread->store(true);
-
-    if (pipelineThread.joinable())
-    {
-        pipelineThread.join();
-    }
+    return recordingThread;
 }
 
-int main()
+int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow)
 {
-    check_hresult(MFStartup(MF_VERSION));
+    UNREFERENCED_PARAMETER(hPrevInstance);
+    UNREFERENCED_PARAMETER(pCmdLine);
+    UNREFERENCED_PARAMETER(nCmdShow);
 
+    std::wstring fileNameBase = L"test-recording";
+    size_t monitorIndex = 0;
+
+    check_hresult(MFStartup(MF_VERSION));
     init_apartment();
 
-    {
-        PrintDevices();
-        cout << endl << endl;
+    auto virtualDesktop = std::make_shared<VirtualDesktop>();
 
-        auto audioRecordingDevices = AudioMedia::GetAudioRecordingDevices();
-        hstring audioEndpoint = L"";
-        if (!audioRecordingDevices.empty())
+    {
+        std::vector<DesktopMonitor> desktopMonitors = virtualDesktop->GetAllDesktopMonitors();
+        auto audioDevices = AudioMedia::GetAudioRecordingDevices();
+        PrintDevices(desktopMonitors, audioDevices);
+    }
+
+    auto windowFactory = WindowFactory<Window>::Create(hInstance);
+
+    auto window = windowFactory.NewWindow();
+    window->Size(400, 120);
+
+    // https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-registerwindowmessagea
+    const auto startRecordingMessage = RegisterWindowMessage(L"DesktopRecorderStartRecording");
+
+    const auto stopRecordingMessage = RegisterWindowMessage(L"DesktopRecorderStopRecording");
+
+    std::unique_ptr<RecordingContext> recordingThread;
+
+    auto borderWindowFactory = WindowFactory<BorderWindow>::Create(hInstance);
+
+    window->Button(L"Start Recording", 10, 10, 200, 40, [&](HWND hwnd) {
+
+        if (recordingThread)
         {
-            audioEndpoint = audioRecordingDevices.front().endpoint;
-            std::wcout << "Using Audio Endpoint: " << audioEndpoint.c_str() << endl;
+            // don't process the button click if already stopping
+            if (!recordingThread->stopRecordingByUser->load())
+            {
+                recordingThread->stopRecordingByUser->store(true);
+                recordingThread->stopThread->store(true);
+                SetWindowText(hwnd, L"Start Recording");
+                PostMessage(nullptr, stopRecordingMessage, 0, 0);
+            }
         }
         else
         {
-            std::wcout << "No audio recording devices found" << endl;
+            SetWindowText(hwnd, L"Stop Recording");
+            PostMessage(nullptr, startRecordingMessage, 0, 0);
+        }
+    });
+
+    int fileNumber = 0;
+
+    // https://docs.microsoft.com/en-us/windows/win32/learnwin32/window-messages
+    MSG msg = { };
+    while (GetMessage(&msg, NULL, 0, 0))
+    {
+        // https://docs.microsoft.com/en-us/windows/win32/learnwin32/closing-the-window
+        if (window && window->Closed())
+        {
+            if (recordingThread)
+            {
+                recordingThread.reset();
+            }
+            PostQuitMessage(0);
         }
 
-        int fileNumber = 0;
-        while (!stopRecordingByUser)
+        if (msg.message == startRecordingMessage)
         {
             std::wstringstream ss;
-            ss << "test-recording-" << fileNumber++ << ".mp4";
+            ss << fileNameBase << "-" << fileNumber++ << ".mp4";
             hstring filename{ ss.str() };
-            std::wcout << L"Saving recording as file: " << filename.c_str() << endl;
-
-            JsonObject settings;
-            settings.Insert(L"filename", JsonValue::CreateStringValue(filename));
-            settings.Insert(L"monitor", JsonValue::CreateNumberValue(0));
-            settings.Insert(L"audioEndpoint", JsonValue::CreateStringValue(audioEndpoint));
-            settings.Insert(L"resolutionOption", JsonValue::CreateNumberValue((int)ResolutionOption::Auto));
-            settings.Insert(L"audioQuality", JsonValue::CreateNumberValue((int)AudioQuality::Auto));
-            settings.Insert(L"framerate", JsonValue::CreateNumberValue(30));
-            settings.Insert(L"bitrate", JsonValue::CreateNumberValue(9000000));
-
-            JsonObject object;
-            object.Insert(L"settings", settings);
-            object.Insert(L"command", JsonValue::CreateStringValue(L"startrecording"));
-
-            StartRecording(object);
+            std::vector<DesktopMonitor> desktopMonitors = virtualDesktop->GetAllDesktopMonitors();
+            RECT monitorBounds = desktopMonitors[monitorIndex].DesktopMonitorBounds();
+            recordingThread = std::move(StartRecording(filename, monitorIndex, monitorBounds, borderWindowFactory));
         }
+        else if (msg.message == stopRecordingMessage)
+        {
+            if (recordingThread)
+            {
+                recordingThread.reset(nullptr);
+            }
+        }
+
+        // check if the thread stopped due to an error
+        if (recordingThread
+            && !recordingThread->stopRecordingByUser->load()
+            && recordingThread->stopThread->load())
+        {
+            // Restart the recording
+            recordingThread.reset(nullptr);
+            PostMessage(nullptr, startRecordingMessage, 0, 0);
+        }
+
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
     }
 
     winrt::check_hresult(MFShutdown());

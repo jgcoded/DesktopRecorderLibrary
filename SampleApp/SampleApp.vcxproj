@@ -84,9 +84,9 @@
       <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(SolutionDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <SubSystem>Console</SubSystem>
+      <SubSystem>Windows</SubSystem>
       <GenerateWindowsMetadata>false</GenerateWindowsMetadata>
-      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">mfuuid.lib;mfplat.lib;shlwapi.lib;mf.lib;mfreadwrite.lib;evr.lib;user32.lib</AdditionalDependencies>
+      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">mfuuid.lib;mfplat.lib;shlwapi.lib;mf.lib;mfreadwrite.lib;evr.lib;user32.lib;gdi32.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PostBuildEvent>
@@ -106,7 +106,7 @@
       <EnableDpiAwareness Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">PerMonitorHighDPIAware</EnableDpiAwareness>
     </Manifest>
     <Link>
-      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">mfuuid.lib;mfplat.lib;shlwapi.lib;mf.lib;mfreadwrite.lib;evr.lib;user32.lib</AdditionalDependencies>
+      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">mfuuid.lib;mfplat.lib;shlwapi.lib;mf.lib;mfreadwrite.lib;evr.lib;user32.lib;gdi32.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
@@ -123,8 +123,8 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateWindowsMetadata>false</GenerateWindowsMetadata>
-      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">mfuuid.lib;mfplat.lib;shlwapi.lib;mf.lib;mfreadwrite.lib;evr.lib;user32.lib</AdditionalDependencies>
-      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Release|x64'">mfuuid.lib;mfplat.lib;shlwapi.lib;mf.lib;mfreadwrite.lib;evr.lib;user32.lib</AdditionalDependencies>
+      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">mfuuid.lib;mfplat.lib;shlwapi.lib;mf.lib;mfreadwrite.lib;evr.lib;user32.lib;gdi32.lib</AdditionalDependencies>
+      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Release|x64'">mfuuid.lib;mfplat.lib;shlwapi.lib;mf.lib;mfreadwrite.lib;evr.lib;user32.lib;gdi32.lib</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -140,6 +140,7 @@
   <ItemGroup>
     <ClInclude Include="pch.h" />
     <ClInclude Include="resource.h" />
+    <ClInclude Include="WindowFactory.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
