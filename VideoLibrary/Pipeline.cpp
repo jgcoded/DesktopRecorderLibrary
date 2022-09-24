@@ -39,17 +39,20 @@ Pipeline::Pipeline(
     mShaderCache = std::make_shared<ShaderCache>(mDuplicator->Device());
     mVertexBuffer = std::make_shared<std::vector<Vertex>>();
 
-    mSharedSurface = mDuplicator->VirtualDesktop()->OpenSharedSurfaceWithDevice(mDuplicator->Device());
-    winrt::check_pointer(mSharedSurface.get());
+    if (auto virtualDesktop = mDuplicator->VirtualDesktop().lock())
+    {
+        mSharedSurface = virtualDesktop->OpenSharedSurfaceWithDevice(mDuplicator->Device());
+        winrt::check_pointer(mSharedSurface.get());
 
-    mKeyedMutex = mSharedSurface.as<IDXGIKeyedMutex>();
-    winrt::check_pointer(mKeyedMutex.get());
+        mKeyedMutex = mSharedSurface.as<IDXGIKeyedMutex>();
+        winrt::check_pointer(mKeyedMutex.get());
 
-    winrt::check_hresult(mDuplicator->Device()->CreateRenderTargetView(
-        mSharedSurface.get(),
-        nullptr,
-        mRenderTargetView.put()
-    ));
+        winrt::check_hresult(mDuplicator->Device()->CreateRenderTargetView(
+            mSharedSurface.get(),
+            nullptr,
+            mRenderTargetView.put()
+        ));
+    }
 }
 
 Pipeline::~Pipeline()
@@ -65,7 +68,12 @@ void Pipeline::Perform()
     DxMultithread multithread{ device.as<ID3D10Multithread>() };
 
     {
-        auto lock = mDuplicator->VirtualDesktop()->LockWithMutex(mKeyedMutex);
+        auto virtualDesktop = mDuplicator->VirtualDesktop().lock();
+        if (!virtualDesktop)
+        {
+            return;
+        }
+        auto lock = virtualDesktop->LockWithMutex(mKeyedMutex);
 
         if (!lock->Locked())
         {

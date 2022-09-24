@@ -83,7 +83,11 @@ void RenderDirtyRectsStep::UpdateDirtyRects()
     // or else the below vertices position calculations will overflow
     const LONG centerX = (LONG)sharedSurfaceDesc.Width / 2;
     const LONG centerY = (LONG)sharedSurfaceDesc.Height / 2;
-    const RECT virtualDesktopRect = mFrame->VirtualDesktop()->VirtualDesktopBounds();
+    RECT virtualDesktopRect{};
+    if (auto virtualDesktop = mFrame->VirtualDesktop().lock())
+    {
+        virtualDesktopRect = virtualDesktop->VirtualDesktopBounds();
+    }
     const LONG offsetX = virtualDesktopRect.left;
     const LONG offsetY = virtualDesktopRect.top;
 

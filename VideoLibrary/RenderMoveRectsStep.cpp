@@ -52,7 +52,11 @@ void RenderMoveRectsStep::Perform()
         return;
     }
 
-    std::shared_ptr<VirtualDesktop> virtualDesktop = mFrame->VirtualDesktop();
+    std::shared_ptr<VirtualDesktop> virtualDesktop = mFrame->VirtualDesktop().lock();
+    if (!virtualDesktop)
+    {
+        return;
+    }
     DXGI_OUTDUPL_MOVE_RECT* moveRects = mFrame->MoveRects();
     const RECT virtualDesktopBounds = virtualDesktop->VirtualDesktopBounds();
     const LONG offsetX = virtualDesktopBounds.left;

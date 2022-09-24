@@ -63,9 +63,14 @@ winrt::com_ptr<IMFMediaType> GetMediaTypeFromDuplicator(DesktopMonitor::ScreenDu
     const auto inputFormat = MFVideoFormat_ARGB32;
     winrt::check_hresult(mediaType->SetGUID(MF_MT_SUBTYPE, inputFormat));
 
-    auto rect = duplicator.VirtualDesktop()->VirtualDesktopBounds();
-    auto width = rect.right - rect.left;
-    auto height = rect.bottom - rect.top;
+    long width = 0;
+    long height = 0;
+    if (auto virtualDesktop = duplicator.VirtualDesktop().lock())
+    {
+        RECT rect = virtualDesktop->VirtualDesktopBounds();
+        width = rect.right - rect.left;
+        height = rect.bottom - rect.top;
+    }
 
     winrt::check_bool(width > 0 && height > 0);
 
@@ -146,7 +151,8 @@ void SetupPipelineThread(std::shared_ptr<std::atomic_bool> stop, std::shared_ptr
 void PipelineThread(
     JsonObject data,
     std::shared_ptr<std::atomic_bool> stop,
-    std::shared_ptr<std::atomic<HRESULT>> threadHResult)
+    std::shared_ptr<std::atomic<HRESULT>> threadHResult,
+    std::shared_ptr<DesktopMonitor::ScreenDuplicator> duplicator)
 {
     check_hresult(MFStartup(MF_VERSION));
     init_apartment();
@@ -167,11 +173,6 @@ void PipelineThread(
     int frameRate = (int)settings.Lookup(L"framerate").GetNumber();
     int bitRate = (int)settings.Lookup(L"bitrate").GetNumber();
 
-    auto virtualDesktop = std::make_shared<VirtualDesktop>();
-
-    std::vector<DesktopMonitor> desktopMonitors = virtualDesktop->GetAllDesktopMonitors();
-    std::shared_ptr<DesktopMonitor::ScreenDuplicator> duplicator = std::move(virtualDesktop->RecordMonitor(desktopMonitors[monitorIndex]));
-
     com_ptr<IMFMediaType> videoMediaType = GetMediaTypeFromDuplicator(*duplicator);
     com_ptr<IMFMediaSource> audioMediaSource;
     com_ptr<IMFMediaType> audioMediaType;
@@ -182,7 +183,7 @@ void PipelineThread(
         audioMediaType = GetMediaTypeFromMediaSource(audioMediaSource);
     }
 
-    std::unique_ptr<ScreenMediaSinkWriter> writer;
+    //std::unique_ptr<ScreenMediaSinkWriter> writer;
     {
         std::wstring fileNameW{ fileName };
         EncodingContext encodingContext{};
@@ -195,12 +196,12 @@ void PipelineThread(
         encodingContext.audioInputMediaType = audioMediaType;
         encodingContext.device = duplicator->Device();
 
-        writer = std::make_unique<ScreenMediaSinkWriter>(encodingContext);
+       // writer = std::make_unique<ScreenMediaSinkWriter>(encodingContext);
     }
 
-    winrt::com_ptr<AsyncMediaSourceReader> audioReader;
+   // winrt::com_ptr<AsyncMediaSourceReader> audioReader;
 
-    auto audioCallback = [&writer, &stop](IMFSample* sample, HRESULT hr)
+    auto audioCallback = [/*&writer,*/ &stop](IMFSample* sample, HRESULT hr)
     {
         if (sample == nullptr && FAILED(hr))
         {
@@ -208,23 +209,24 @@ void PipelineThread(
         }
 
         sample->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Audio);
-        writer->WriteSample(sample);
+        //writer->WriteSample(sample);
     };
 
     if (audioMediaSource)
-    {
+    {/*
         audioReader.attach(new AsyncMediaSourceReader{
             audioMediaSource,
             audioCallback,
             1000 / frameRate,
             (DWORD)MF_SOURCE_READER_FIRST_AUDIO_STREAM });
+            */
     }
 
-    writer->Begin();
+    //writer->Begin();
 
-    if (audioReader)
+    //if (audioReader)
     {
-        audioReader->Start();
+        //audioReader->Start();
     }
 
     // Enable away mode and prevent display and system idle timeouts
@@ -242,7 +244,7 @@ void PipelineThread(
             if (duplicationPipeline->Sample())
             {
                 sample->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
-                writer->WriteSample(sample.get());
+                //writer->WriteSample(sample.get());
             }
             Sleep(1000 / frameRate);
         }
@@ -257,17 +259,16 @@ void PipelineThread(
 
     // clear resources
     {
-        if (audioReader)
+      //  if (audioReader)
         {
-            audioReader->Stop();
-            audioReader = nullptr;
+        //    audioReader->Stop();
         }
 
-        writer->End();
+        //writer->End();
 
-        writer.reset(nullptr);
+        //writer.reset(nullptr);
 
-        desktopMonitors.clear();
+        //desktopMonitors.clear();
 
         {
             auto device = duplicator->Device();
@@ -285,17 +286,17 @@ void PipelineThread(
         }
 
         {
-            auto device = virtualDesktop->Device();
-            virtualDesktop.reset();
+            //auto device = virtualDesktop->Device();
+            //virtualDesktop.reset();
 
-            winrt::com_ptr<ID3D11DeviceContext> context;
-            device->GetImmediateContext(context.put());
-            context->ClearState();
-            context->Flush();
+            //winrt::com_ptr<ID3D11DeviceContext> context;
+            //device->GetImmediateContext(context.put());
+            //context->ClearState();
+            //context->Flush();
 
 #if _DEBUG
-            auto debug = device.as<ID3D11Debug>();
-            debug->ReportLiveDeviceObjects(D3D11_RLDO_DETAIL);
+            //auto debug = device.as<ID3D11Debug>();
+            //debug->ReportLiveDeviceObjects(D3D11_RLDO_DETAIL);
 #endif
         }
     }
@@ -350,7 +351,7 @@ struct RecordingContext
     }
 };
 
-std::unique_ptr<RecordingContext> StartRecording(hstring filename, size_t monitorIndex, RECT monitorBounds, WindowFactory<BorderWindow>& windowFactory)
+std::unique_ptr<RecordingContext> StartRecording(hstring filename, std::shared_ptr<VirtualDesktop> virtualDesktop, size_t monitorIndex, RECT monitorBounds, WindowFactory<BorderWindow>& windowFactory)
 {
     std::unique_ptr<RecordingContext> recordingThread{ new RecordingContext{} };
     recordingThread->stopThread.reset(new atomic_bool{ false });
@@ -367,11 +368,16 @@ std::unique_ptr<RecordingContext> StartRecording(hstring filename, size_t monito
 
     JsonObject data = MakeRecordCommand(filename, monitorIndex);
 
+    // auto virtualDesktop = std::make_shared<VirtualDesktop>();
+
+    std::vector<DesktopMonitor> desktopMonitors = virtualDesktop->GetAllDesktopMonitors();
+
     recordingThread->pipelineThread = std::thread {
         PipelineThread,
         data,
         recordingThread->stopThread,
-        recordingThread->stopThreadResult
+        recordingThread->stopThreadResult,
+        std::move(virtualDesktop->RecordMonitor(desktopMonitors[monitorIndex]))
     };
 
     return recordingThread;
@@ -388,14 +394,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 
     check_hresult(MFStartup(MF_VERSION));
     init_apartment();
-
-    auto virtualDesktop = std::make_shared<VirtualDesktop>();
-
-    {
-        std::vector<DesktopMonitor> desktopMonitors = virtualDesktop->GetAllDesktopMonitors();
-        auto audioDevices = AudioMedia::GetAudioRecordingDevices();
-        PrintDevices(desktopMonitors, audioDevices);
-    }
 
     auto windowFactory = WindowFactory<Window>::Create(hInstance);
 
@@ -432,6 +430,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     });
 
     int fileNumber = 0;
+    std::shared_ptr<VirtualDesktop> virtualDesktop;
 
     // https://docs.microsoft.com/en-us/windows/win32/learnwin32/window-messages
     MSG msg = { };
@@ -449,18 +448,21 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 
         if (msg.message == startRecordingMessage)
         {
+            virtualDesktop = std::make_shared<VirtualDesktop>();
+            std::vector<DesktopMonitor> desktopMonitors = virtualDesktop->GetAllDesktopMonitors();
+
             std::wstringstream ss;
             ss << fileNameBase << "-" << fileNumber++ << ".mp4";
             hstring filename{ ss.str() };
-            std::vector<DesktopMonitor> desktopMonitors = virtualDesktop->GetAllDesktopMonitors();
             RECT monitorBounds = desktopMonitors[monitorIndex].DesktopMonitorBounds();
-            recordingThread = std::move(StartRecording(filename, monitorIndex, monitorBounds, borderWindowFactory));
+            recordingThread = std::move(StartRecording(filename, virtualDesktop, monitorIndex, monitorBounds, borderWindowFactory));
         }
         else if (msg.message == stopRecordingMessage)
         {
             if (recordingThread)
             {
                 recordingThread.reset(nullptr);
+                virtualDesktop.reset();
             }
         }
 

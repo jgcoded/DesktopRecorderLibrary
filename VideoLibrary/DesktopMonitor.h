@@ -58,7 +58,7 @@ public:
 
             winrt::com_ptr<ID3D11Texture2D> DesktopImage() const;
             
-            std::shared_ptr<class VirtualDesktop> VirtualDesktop() const;
+            std::weak_ptr<class VirtualDesktop> VirtualDesktop() const;
 
             RECT DesktopMonitorBounds() const;
 
@@ -81,7 +81,7 @@ public:
             winrt::com_ptr<ID3D11Texture2D> mFrameTexture;
             DXGI_OUTDUPL_FRAME_INFO mFrameInfo;
             winrt::com_ptr<IDXGIOutputDuplication> mDupl;
-            std::shared_ptr<class VirtualDesktop> mVirtualDesktop;
+            std::weak_ptr<class VirtualDesktop> mVirtualDesktop;
             std::shared_ptr<std::vector<byte>> mRectBuffer;
 
             bool mCaptured;
@@ -100,7 +100,7 @@ public:
 
         winrt::com_ptr<ID3D11Device> Device() const { return mDevice; }
 
-        std::shared_ptr<class VirtualDesktop> VirtualDesktop() const;
+        std::weak_ptr<class VirtualDesktop> VirtualDesktop() const;
 
         std::shared_ptr<class DesktopPointer> DesktopPointer();
 
@@ -113,12 +113,12 @@ public:
         void DuplicateOutput();
 
         winrt::com_ptr<ID3D11Device> mDevice;
-        std::shared_ptr<DisplayAdapter> mDisplayAdapter;
+        std::weak_ptr<DisplayAdapter> mDisplayAdapter;
         winrt::com_ptr<IDXGIOutput1> mOutput;
         winrt::com_ptr<IDXGIOutputDuplication> mDupl;
         int mOutputIndex;
         std::wstring mOutputName;
-        std::shared_ptr<class VirtualDesktop> mVirtualDesktop;
+        std::weak_ptr<class VirtualDesktop> mVirtualDesktop;
 
         // Holds move and dirty rects
         std::shared_ptr<std::vector<byte>> mRectBuffer;
@@ -149,5 +149,5 @@ private:
     DXGI_MODE_ROTATION mRotation;
 
     std::shared_ptr<DisplayAdapter> mDisplayAdapter;
-    std::shared_ptr<class VirtualDesktop> mVirtualDesktop;
+    std::weak_ptr<class VirtualDesktop> mVirtualDesktop;
 };

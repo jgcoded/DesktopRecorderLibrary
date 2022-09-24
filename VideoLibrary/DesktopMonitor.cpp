@@ -68,7 +68,7 @@ DesktopMonitor::ScreenDuplicator::ScreenDuplicator(DesktopMonitor const& monitor
     DuplicateOutput();
 }
 
-std::shared_ptr<VirtualDesktop> DesktopMonitor::ScreenDuplicator::VirtualDesktop() const
+std::weak_ptr<VirtualDesktop> DesktopMonitor::ScreenDuplicator::VirtualDesktop() const
 {
     return mVirtualDesktop;
 }
@@ -80,7 +80,19 @@ std::shared_ptr<class DesktopPointer> DesktopMonitor::ScreenDuplicator::DesktopP
 
 void DesktopMonitor::ScreenDuplicator::ResetDuplication()
 {
-    std::vector<DesktopMonitor> monitors = mVirtualDesktop->GetAllDesktopMonitors();
+    auto virtualDesktop = mVirtualDesktop.lock();
+    if (!virtualDesktop)
+    {
+        return;
+    }
+
+    auto displayAdapter = mDisplayAdapter.lock();
+    if (!displayAdapter)
+    {
+        return;
+    }
+
+    std::vector<DesktopMonitor> monitors = virtualDesktop->GetAllDesktopMonitors();
     if (mDupl)
     {
         mDupl = nullptr;
@@ -90,14 +102,14 @@ void DesktopMonitor::ScreenDuplicator::ResetDuplication()
     {
         if (monitor.mOutputName == mOutputName
             && monitor.mOutputIndex == mOutputIndex
-            && monitor.mDisplayAdapter->Name() == mDisplayAdapter->Name()
+            && monitor.mDisplayAdapter->Name() == displayAdapter->Name()
             && (monitor.Rotation() == DXGI_MODE_ROTATION_IDENTITY ||
                 monitor.Rotation() == DXGI_MODE_ROTATION_UNSPECIFIED))
         {
             // only change the recorded monitor if DuplicateOutput did not throw
-            std::unique_ptr<ScreenDuplicator> duplicator = mVirtualDesktop->RecordMonitor(monitor);
+            std::unique_ptr<ScreenDuplicator> duplicator = virtualDesktop->RecordMonitor(monitor);
             this->mDisplayAdapter = duplicator->mDisplayAdapter;
-            this->mDevice = this->mDisplayAdapter->Device();
+            this->mDevice = displayAdapter->Device();
             this->mDupl = duplicator->mDupl;
             this->mOutput = duplicator->mOutput;
             this->mOutputIndex = duplicator->mOutputIndex;
@@ -175,10 +187,12 @@ DesktopMonitor::ScreenDuplicator::Frame::Frame(ScreenDuplicator& duplicator)
         mDesktopMonitorBounds = desc.DesktopCoordinates;
         mRotation = desc.Rotation;
 
-        auto virtualDesktopBounds = mVirtualDesktop->VirtualDesktopBounds();
-        mFrameInfo.PointerPosition.Position.x += mDesktopMonitorBounds.left - virtualDesktopBounds.left;
-        mFrameInfo.PointerPosition.Position.y += mDesktopMonitorBounds.top - virtualDesktopBounds.top;
-
+        if (auto virtualDesktop = mVirtualDesktop.lock())
+        {
+            auto virtualDesktopBounds = virtualDesktop->VirtualDesktopBounds();
+            mFrameInfo.PointerPosition.Position.x += mDesktopMonitorBounds.left - virtualDesktopBounds.left;
+            mFrameInfo.PointerPosition.Position.y += mDesktopMonitorBounds.top - virtualDesktopBounds.top;
+        }
         duplicator.DesktopPointer()->UpdatePosition(
             mFrameInfo.PointerPosition,
             mFrameInfo.LastMouseUpdateTime,
@@ -235,7 +249,7 @@ winrt::com_ptr<ID3D11Texture2D> DesktopMonitor::ScreenDuplicator::Frame::Desktop
     return mFrameTexture;
 }
 
-std::shared_ptr<VirtualDesktop> DesktopMonitor::ScreenDuplicator::Frame::VirtualDesktop() const
+std::weak_ptr<VirtualDesktop> DesktopMonitor::ScreenDuplicator::Frame::VirtualDesktop() const
 {
     return mVirtualDesktop;
 }

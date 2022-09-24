@@ -59,7 +59,7 @@ void RenderPointerTextureStep::Perform()
     winrt::com_ptr<IDXGIKeyedMutex> mutex = mSharedSurface.as<IDXGIKeyedMutex>();
     winrt::check_pointer(mutex.get());
 
-    std::shared_ptr<VirtualDesktop> virtualDesktop = mScreenDuplicator->VirtualDesktop();
+    std::shared_ptr<VirtualDesktop> virtualDesktop = mScreenDuplicator->VirtualDesktop().lock();
     // todo in multi monitor scenario see if the pointer is visible for currently drawn monitor
     auto lock = virtualDesktop->LockWithMutex(mutex);
 
