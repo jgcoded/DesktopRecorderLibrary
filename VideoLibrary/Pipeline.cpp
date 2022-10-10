@@ -32,7 +32,6 @@ Pipeline::Pipeline(
     RECT virtualDesktopBounds
 )
     : mDuplicator{ duplicator }
-    , mSharedSurface{ sharedSurface }
     , mVirtualDesktopBounds{ virtualDesktopBounds }
 {
     if (mDuplicator == nullptr)
@@ -40,9 +39,25 @@ Pipeline::Pipeline(
         throw std::exception("Null duplicator");
     }
 
+    mSharedSurface = sharedSurface->OpenSharedSurfaceWithDevice(duplicator->Device());
+    winrt::check_pointer(mSharedSurface.get());
+
+    {
+        auto lock = mSharedSurface->Lock();
+        assert(lock->Locked());
+        if (lock->Locked())
+        {
+            winrt::check_hresult(mDuplicator->Device()->CreateRenderTargetView(
+                lock->TexturePtr(),
+                nullptr,
+                mRenderTargetView.put()
+            ));
+        }
+    }
+
     mShaderCache = std::make_shared<ShaderCache>(mDuplicator->Device());
     mVertexBuffer = std::make_shared<std::vector<Vertex>>();
-    winrt::check_pointer(mSharedSurface.get());
+
 }
 
 Pipeline::~Pipeline()
@@ -56,7 +71,6 @@ void Pipeline::Perform()
     // need to use multithread protect because of Media Foundation api
     // https://docs.microsoft.com/en-us/windows/win32/api/mfobjects/nf-mfobjects-imfdxgidevicemanager-resetdevice#remarks
     DxMultithread multithread{ device.as<ID3D10Multithread>() };
-    RECT desktopMonitorBounds;
     {
         auto lock = mSharedSurface->Lock();
 
@@ -69,7 +83,7 @@ void Pipeline::Perform()
         captureFrame.Perform();
 
         std::shared_ptr<Frame> frame = captureFrame.Result();
-        desktopMonitorBounds = frame->DesktopMonitorBounds();
+        mDesktopMonitorBounds = frame->DesktopMonitorBounds();
         if (frame->Captured())
         {
             if (mTexturePool == nullptr)
@@ -84,15 +98,6 @@ void Pipeline::Perform()
                 stagingDesc.BindFlags = D3D11_BIND_RENDER_TARGET;
                 stagingDesc.MiscFlags = 0;
                 AllocateStagingTexture(device, stagingDesc);
-            }
-
-            if (mRenderTargetView == nullptr)
-            {
-                winrt::check_hresult(mDuplicator->Device()->CreateRenderTargetView(
-                    lock->TexturePtr(),
-                    nullptr,
-                    mRenderTargetView.put()
-                ));
             }
 
             RenderMoveRectsStep renderMoves{
@@ -117,13 +122,13 @@ void Pipeline::Perform()
     }
 
     RenderPointerTextureStep renderPointer{
-        mDuplicator->DesktopPointer(),
+        mDuplicator->DesktopPointerPtr(),
         mSharedSurface,
         mDuplicator->Device(),
         mShaderCache,
         mTexturePool,
         mVirtualDesktopBounds,
-        desktopMonitorBounds
+        mDesktopMonitorBounds
     };
     renderPointer.Perform();
 

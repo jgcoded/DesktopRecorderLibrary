@@ -31,7 +31,7 @@ public:
 
     winrt::com_ptr<ID3D11Device> Device() const { return mDevice; }
 
-    std::shared_ptr<DesktopPointer> DesktopPointer();
+    std::shared_ptr<DesktopPointer> DesktopPointerPtr();
 
     winrt::com_ptr<IDXGIOutput1> Output() const { return mOutput; }
 

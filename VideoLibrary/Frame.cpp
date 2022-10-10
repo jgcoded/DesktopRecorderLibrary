@@ -51,11 +51,11 @@ Frame::Frame(ScreenDuplicator& duplicator)
             UINT requiredBufferSize;
             DXGI_OUTDUPL_POINTER_SHAPE_INFO pointerInfo;
             winrt::check_hresult(mDupl->GetFramePointerShape(mFrameInfo.PointerShapeBufferSize,
-                reinterpret_cast<void*>(duplicator.DesktopPointer()->PutBuffer(mFrameInfo.PointerShapeBufferSize)),
+                reinterpret_cast<void*>(duplicator.DesktopPointerPtr()->PutBuffer(mFrameInfo.PointerShapeBufferSize)),
                 &requiredBufferSize,
                 &pointerInfo));
 
-            duplicator.DesktopPointer()->ShapeInfo(pointerInfo);
+            duplicator.DesktopPointerPtr()->ShapeInfo(pointerInfo);
         }
 
         DXGI_OUTPUT_DESC desc;
@@ -63,7 +63,7 @@ Frame::Frame(ScreenDuplicator& duplicator)
         mDesktopMonitorBounds = desc.DesktopCoordinates;
         mRotation = desc.Rotation;
 
-        duplicator.DesktopPointer()->UpdatePosition(
+        duplicator.DesktopPointerPtr()->UpdatePosition(
             mFrameInfo.PointerPosition,
             mFrameInfo.LastMouseUpdateTime,
             duplicator.OutputIndex());

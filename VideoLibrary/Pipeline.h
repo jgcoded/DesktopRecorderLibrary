@@ -25,6 +25,7 @@
 #include "ScreenDuplicator.h"
 #include "Vertex.h"
 #include "ShaderCache.h"
+#include "SharedSurface.h"
 
 class Pipeline : public RecordingStep
 {
@@ -56,4 +57,5 @@ private:
     winrt::com_ptr<IMFSample> mSample;
     winrt::com_ptr<ID3D11RenderTargetView> mRenderTargetView;
     RECT mVirtualDesktopBounds;
+    RECT mDesktopMonitorBounds;
 };

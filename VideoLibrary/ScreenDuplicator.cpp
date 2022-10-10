@@ -22,7 +22,8 @@
 #include "ScreenDuplicator.h"
 
 ScreenDuplicator::ScreenDuplicator(DesktopMonitor const& monitor)
-    : mOutput{ monitor.Output()}
+    : mDevice {monitor.Adapter().Device() }
+    , mOutput{ monitor.Output()}
     , mDesktopPointer{ std::make_shared<DesktopPointer>() }
     , mRectBuffer{ std::make_shared<std::vector<byte>>() }
 {
@@ -33,7 +34,7 @@ ScreenDuplicator::ScreenDuplicator(DesktopMonitor const& monitor)
     }
 }
 
-std::shared_ptr<DesktopPointer> ScreenDuplicator::DesktopPointer()
+std::shared_ptr<DesktopPointer> ScreenDuplicator::DesktopPointerPtr()
 {
     return mDesktopPointer;
 }

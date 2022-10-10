@@ -91,3 +91,8 @@ RECT VirtualDesktop::VirtualDesktopBounds() const
 {
     return mVirtualDesktopBounds;
 }
+
+std::vector<DesktopMonitor> VirtualDesktop::DesktopMonitors() const
+{
+    return mDesktopMonitors;
+}

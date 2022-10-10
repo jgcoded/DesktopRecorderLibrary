@@ -32,6 +32,7 @@ public:
 
     static std::vector<DesktopMonitor> GetAllDesktopMonitors();
 
+    std::vector<DesktopMonitor> DesktopMonitors() const;
     RECT VirtualDesktopBounds() const;
 
     static RECT CalculateDesktopMonitorBounds(const std::vector<DesktopMonitor>& desktopMonitors);
