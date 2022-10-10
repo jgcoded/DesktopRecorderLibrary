@@ -179,12 +179,20 @@ void PipelineThread(
     }
 
     std::vector<DesktopMonitor> desktopMonitors = virtualDesktop->DesktopMonitors();
-    std::shared_ptr<ScreenDuplicator> duplicator = std::make_shared<ScreenDuplicator>(desktopMonitors[monitorIndex]);
+    std::shared_ptr<DesktopPointer> desktopPointer = std::make_shared<DesktopPointer>(virtualDesktop->VirtualDesktopBounds());
+    std::shared_ptr<ScreenDuplicator> duplicator = std::make_shared<ScreenDuplicator>(
+        desktopMonitors[monitorIndex],
+        desktopPointer
+    );
     
-    auto bounds = virtualDesktop->VirtualDesktopBounds();
-    auto width = bounds.right - bounds.left;
-    auto height = bounds.bottom - bounds.top;
-    std::shared_ptr<SharedSurface> sharedSurface = std::make_shared<SharedSurface>(duplicator->Device(), width, height);
+    RECT bounds = virtualDesktop->VirtualDesktopBounds();
+    LONG width = bounds.right - bounds.left;
+    LONG height = bounds.bottom - bounds.top;
+    std::shared_ptr<SharedSurface> sharedSurface = std::make_shared<SharedSurface>(
+        duplicator->Device(),
+        width,
+        height
+    );
     std::unique_ptr<ScreenMediaSinkWriter> writer;
     {
         std::wstring fileNameW{ fileName };

@@ -40,6 +40,7 @@ RenderPointerTextureStep::RenderPointerTextureStep(
     , mTexturePool{ texturePool }
     , mVirtualDesktopBounds{ virtualDesktopBounds }
     , mDesktopMonitorBounds{ desktopMonitorBounds }
+    , mResult{ nullptr }
 {
     if (mDesktopPointer == nullptr)
     {
@@ -85,9 +86,6 @@ void RenderPointerTextureStep::Perform()
     }
     
     POINT pos = mDesktopPointer->Position().Position;
-    pos.x += mDesktopMonitorBounds.left - mVirtualDesktopBounds.left;
-    pos.y += mDesktopMonitorBounds.top - mVirtualDesktopBounds.top;
-
     DXGI_OUTDUPL_POINTER_SHAPE_INFO shape = mDesktopPointer->ShapeInfo();
 
     // render pointer to copy

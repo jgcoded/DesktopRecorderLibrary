@@ -32,6 +32,7 @@ Pipeline::Pipeline(
     RECT virtualDesktopBounds
 )
     : mDuplicator{ duplicator }
+    , mSharedSurface{ sharedSurface }
     , mVirtualDesktopBounds{ virtualDesktopBounds }
 {
     if (mDuplicator == nullptr)
@@ -39,22 +40,7 @@ Pipeline::Pipeline(
         throw std::exception("Null duplicator");
     }
 
-    mSharedSurface = sharedSurface->OpenSharedSurfaceWithDevice(duplicator->Device());
     winrt::check_pointer(mSharedSurface.get());
-
-    {
-        auto lock = mSharedSurface->Lock();
-        assert(lock->Locked());
-        if (lock->Locked())
-        {
-            winrt::check_hresult(mDuplicator->Device()->CreateRenderTargetView(
-                lock->TexturePtr(),
-                nullptr,
-                mRenderTargetView.put()
-            ));
-        }
-    }
-
     mShaderCache = std::make_shared<ShaderCache>(mDuplicator->Device());
     mVertexBuffer = std::make_shared<std::vector<Vertex>>();
 
@@ -98,6 +84,15 @@ void Pipeline::Perform()
                 stagingDesc.BindFlags = D3D11_BIND_RENDER_TARGET;
                 stagingDesc.MiscFlags = 0;
                 AllocateStagingTexture(device, stagingDesc);
+            }
+
+            if (mRenderTargetView == nullptr)
+            {
+                winrt::check_hresult(mDuplicator->Device()->CreateRenderTargetView(
+                    lock->TexturePtr(),
+                    nullptr,
+                    mRenderTargetView.put()
+                ));
             }
 
             RenderMoveRectsStep renderMoves{

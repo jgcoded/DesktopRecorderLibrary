@@ -27,7 +27,10 @@ class ScreenDuplicator
 {
 public:
 
-    ScreenDuplicator(DesktopMonitor const& monitor);
+    ScreenDuplicator(
+        DesktopMonitor const& monitor,
+        std::shared_ptr<DesktopPointer> desktopPointer
+    );
 
     winrt::com_ptr<ID3D11Device> Device() const { return mDevice; }
 

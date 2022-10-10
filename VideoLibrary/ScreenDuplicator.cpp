@@ -21,11 +21,14 @@
 #include "Errors.h"
 #include "ScreenDuplicator.h"
 
-ScreenDuplicator::ScreenDuplicator(DesktopMonitor const& monitor)
+ScreenDuplicator::ScreenDuplicator(
+    DesktopMonitor const& monitor,
+    std::shared_ptr<DesktopPointer> desktopPointer)
     : mDevice {monitor.Adapter().Device() }
     , mOutput{ monitor.Output()}
-    , mDesktopPointer{ std::make_shared<DesktopPointer>() }
+    , mDesktopPointer{ desktopPointer }
     , mRectBuffer{ std::make_shared<std::vector<byte>>() }
+    , mOutputIndex{ monitor.OutputIndex() }
 {
     HRESULT hr = mOutput->DuplicateOutput(mDevice.get(), mDupl.put());
     if (FAILED(hr))

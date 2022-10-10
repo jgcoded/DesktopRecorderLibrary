@@ -29,6 +29,8 @@ Frame::Frame(ScreenDuplicator& duplicator)
     , mNumDirtyRects{ 0 }
     , mMoveRects{ nullptr }
     , mDirtyRects{ nullptr }
+    , mDesktopMonitorBounds{ }
+    , mRotation{ DXGI_MODE_ROTATION_UNSPECIFIED }
 {
     try
     {
@@ -66,7 +68,8 @@ Frame::Frame(ScreenDuplicator& duplicator)
         duplicator.DesktopPointerPtr()->UpdatePosition(
             mFrameInfo.PointerPosition,
             mFrameInfo.LastMouseUpdateTime,
-            duplicator.OutputIndex());
+            duplicator.OutputIndex(),
+            mDesktopMonitorBounds);
 
         // get frame metadata
         if (mFrameInfo.TotalMetadataBufferSize != 0) {

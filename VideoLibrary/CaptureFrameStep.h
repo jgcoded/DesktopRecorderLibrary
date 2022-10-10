@@ -37,6 +37,5 @@ public:
 
 private:
     ScreenDuplicator& mDupl;
-    D3D11_TEXTURE2D_DESC mTextureDesc;
     std::shared_ptr<Frame> mFrame;
 };
