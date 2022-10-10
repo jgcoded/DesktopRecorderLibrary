@@ -18,14 +18,18 @@
 */
 
 #pragma once
+
+#include "Frame.h"
 #include "RecordingStep.h"
+
 class RenderMoveRectsStep : public RecordingStep
 {
 public:
     RenderMoveRectsStep(
-        std::shared_ptr<DesktopMonitor::ScreenDuplicator::Frame> frame,
+        std::shared_ptr<Frame> frame,
+        RECT virtualDesktopBounds,
         winrt::com_ptr<ID3D11Texture2D> stagingTexture,
-        winrt::com_ptr<ID3D11Texture2D> sharedSurface);
+        ID3D11Texture2D* sharedSurfacePtr);
     
     ~RenderMoveRectsStep();
 
@@ -34,7 +38,8 @@ public:
 
 private:
     winrt::com_ptr<ID3D11Texture2D> mStagingTexture;
-    winrt::com_ptr<ID3D11Texture2D> mSharedSurface;
-    std::shared_ptr<DesktopMonitor::ScreenDuplicator::Frame> mFrame;
+    ID3D11Texture2D* mSharedSurfacePtr;
+    std::shared_ptr<Frame> mFrame;
+    RECT mVirtualDesktopBounds;
 };
 

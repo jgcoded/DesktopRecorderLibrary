@@ -19,23 +19,20 @@
 
 #pragma once
 
-#include "RecordingStep.h"
-#include "DesktopMonitor.h"
-#include "ScreenDuplicator.h"
-#include "Frame.h"
-
-class CaptureFrameStep :
-    public RecordingStep
+class DisplayAdapter
 {
 public:
-    CaptureFrameStep(ScreenDuplicator& duplicator);
-    virtual ~CaptureFrameStep();
 
-    virtual void Perform() override;
+    DisplayAdapter(winrt::com_ptr<IDXGIAdapter1> const& adapter);
 
-    std::shared_ptr<Frame> Result();
+    winrt::com_ptr<ID3D11Device> Device() const { return mDevice; }
+
+    std::wstring const& Name() const { return mAdapterName; }
 
 private:
-    ScreenDuplicator& mDupl;
-    std::shared_ptr<Frame> mFrame;
+
+    winrt::com_ptr<ID3D11Device> mDevice;
+    winrt::com_ptr<IDXGIAdapter1> mAdapter;
+
+    std::wstring mAdapterName;
 };

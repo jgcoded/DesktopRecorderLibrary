@@ -59,7 +59,10 @@ private:
 class KeyedMutexLock
 {
 public:
-    KeyedMutexLock(winrt::com_ptr<IDXGIKeyedMutex> mutex, std::shared_ptr<RotatingKeys> rotatingKeys)
+    KeyedMutexLock(
+        winrt::com_ptr<ID3D11Texture2D> texture,
+        winrt::com_ptr<IDXGIKeyedMutex> mutex,
+        std::shared_ptr<RotatingKeys> rotatingKeys)
         : mMutex{ mutex }
         , mRotatingKeys{ rotatingKeys }
         , mLocked{ false }
@@ -82,10 +85,12 @@ public:
 
         winrt::check_hresult(hr);
         mLocked = true;
+        mTexture = texture;
     }
 
     ~KeyedMutexLock()
     {
+        // only release and rotate if mLocked is true?
         auto releaseKey = mRotatingKeys->ReleaseKey();
         mRotatingKeys->Rotate();
         winrt::check_hresult(mMutex->ReleaseSync(releaseKey));
@@ -93,8 +98,14 @@ public:
 
     bool Locked() const { return mLocked; }
 
+    ID3D11Texture2D* TexturePtr() const
+    {
+        return mTexture.get();
+    }
+
 private:
     winrt::com_ptr<IDXGIKeyedMutex> mMutex;
     bool mLocked;
     std::shared_ptr<RotatingKeys> mRotatingKeys;
+    winrt::com_ptr<ID3D11Texture2D> mTexture;
 };

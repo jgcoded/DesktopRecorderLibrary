@@ -17,25 +17,16 @@
     along with DesktopRecorderLibrary. If not, see <https://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#include "pch.h"
+#include "DxResource.h"
+#include "DisplayAdapter.h"
 
-#include "RecordingStep.h"
-#include "DesktopMonitor.h"
-#include "ScreenDuplicator.h"
-#include "Frame.h"
-
-class CaptureFrameStep :
-    public RecordingStep
+DisplayAdapter::DisplayAdapter(winrt::com_ptr<IDXGIAdapter1> const& adapter)
+    : mAdapter{ adapter }
 {
-public:
-    CaptureFrameStep(ScreenDuplicator& duplicator);
-    virtual ~CaptureFrameStep();
+    DXGI_ADAPTER_DESC1 adapterDesc;
+    winrt::check_hresult(mAdapter->GetDesc1(&adapterDesc));
 
-    virtual void Perform() override;
-
-    std::shared_ptr<Frame> Result();
-
-private:
-    ScreenDuplicator& mDupl;
-    std::shared_ptr<Frame> mFrame;
-};
+    mAdapterName = adapterDesc.Description;
+    mDevice = DxResource::MakeVideoEnabledDevice(mAdapter);
+}

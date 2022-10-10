@@ -18,37 +18,44 @@
 */
 
 #pragma once
-#include "DisplayAdapter.h"
-#include "DesktopPointer.h"
 
-class DesktopMonitor
+#include "DesktopPointer.h"
+#include "DisplayAdapter.h"
+#include "DesktopMonitor.h"
+
+class ScreenDuplicator
 {
 public:
 
-    DesktopMonitor(
-        std::shared_ptr<DisplayAdapter> displayAdapter,
-        winrt::com_ptr<IDXGIOutput1> output,
-        int outputIndex);
+    ScreenDuplicator(
+        DesktopMonitor const& monitor,
+        std::shared_ptr<DesktopPointer> desktopPointer
+    );
 
-    std::wstring OutputName() const { return mOutputName; }
+    winrt::com_ptr<ID3D11Device> Device() const { return mDevice; }
 
-    RECT DesktopMonitorBounds() const { return mDesktopMonitorBounds; }
-
-    DXGI_MODE_ROTATION Rotation() const { return mRotation; }
-
-    DisplayAdapter const& Adapter() const { return *mDisplayAdapter; }
+    std::shared_ptr<DesktopPointer> DesktopPointerPtr();
 
     winrt::com_ptr<IDXGIOutput1> Output() const { return mOutput; }
 
     int OutputIndex() const { return mOutputIndex; }
 
+    winrt::com_ptr<IDXGIOutputDuplication> Duplication() const { return mDupl; }
+
+    std::shared_ptr<std::vector<byte>> Buffer() const { return mRectBuffer; };
+
+    ~ScreenDuplicator();
+
 private:
 
+    winrt::com_ptr<ID3D11Device> mDevice;
     winrt::com_ptr<IDXGIOutput1> mOutput;
-    RECT mDesktopMonitorBounds;
+    winrt::com_ptr<IDXGIOutputDuplication> mDupl;
     std::wstring mOutputName;
     int mOutputIndex;
-    DXGI_MODE_ROTATION mRotation;
 
-    std::shared_ptr<DisplayAdapter> mDisplayAdapter;
+    // Holds move and dirty rects
+    std::shared_ptr<std::vector<byte>> mRectBuffer;
+
+    std::shared_ptr<DesktopPointer> mDesktopPointer;
 };

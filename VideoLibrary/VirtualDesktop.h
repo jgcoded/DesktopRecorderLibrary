@@ -20,39 +20,24 @@
 #pragma once
 
 #include "DesktopMonitor.h"
+#include "ScreenDuplicator.h"
 #include "KeyedMutexLock.h"
 
-class VirtualDesktop : public std::enable_shared_from_this<VirtualDesktop>
+class VirtualDesktop
 {
 public:
     VirtualDesktop();
 
     ~VirtualDesktop();
 
-    std::vector<DesktopMonitor> GetAllDesktopMonitors();
+    static std::vector<DesktopMonitor> GetAllDesktopMonitors();
 
-    std::unique_ptr<DesktopMonitor::ScreenDuplicator> RecordMonitor(const DesktopMonitor& monitor);
-
-    std::vector<std::unique_ptr<DesktopMonitor::ScreenDuplicator>> RecordMonitors(std::vector<DesktopMonitor> monitors);
-
+    std::vector<DesktopMonitor> DesktopMonitors() const;
     RECT VirtualDesktopBounds() const;
 
     static RECT CalculateDesktopMonitorBounds(const std::vector<DesktopMonitor>& desktopMonitors);
 
-    winrt::com_ptr<ID3D11Device> Device() const;
-
-    std::unique_ptr<KeyedMutexLock> LockWithMutex(winrt::com_ptr<IDXGIKeyedMutex> keyedMutex) const;
-
-    winrt::com_ptr<ID3D11Texture2D> OpenSharedSurfaceWithDevice(winrt::com_ptr<ID3D11Device> device);
-
 private:
-
-    void ResetSharedSurface();
-
-    winrt::com_ptr<ID3D11Texture2D> mSharedSurface;
-    std::shared_ptr<RotatingKeys> mRotatingKeys;
-    winrt::com_ptr<IDXGIKeyedMutex> mMutex;
-    winrt::com_ptr<ID3D11Device> mDevice;
 
     std::vector<DesktopMonitor> mDesktopMonitors;
     RECT mVirtualDesktopBounds;

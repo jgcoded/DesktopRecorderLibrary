@@ -21,13 +21,14 @@
 #include "DesktopPointer.h"
 
 
-DesktopPointer::DesktopPointer()
+DesktopPointer::DesktopPointer(RECT virtualDesktopBounds)
     : mIsPointerTextureStale { true }
     , mPointerOwnerIndex { UINT_MAX }
     , mLastUpdateTime { 0 }
     , mPosition{}
     , mShapeInfo{}
     , mVisible{ false }
+    , mVirtualDesktopBounds{ virtualDesktopBounds }
 {
 }
 
@@ -59,7 +60,8 @@ DXGI_OUTDUPL_POINTER_POSITION DesktopPointer::Position() const
 void DesktopPointer::UpdatePosition(
     DXGI_OUTDUPL_POINTER_POSITION newPosition,
     LARGE_INTEGER updateTime,
-    UINT outputIndex)
+    UINT outputIndex,
+    RECT desktopMonitorBounds)
 {
     if (updateTime.QuadPart == 0) {
         return;
@@ -80,11 +82,16 @@ void DesktopPointer::UpdatePosition(
             updateTime.QuadPart > mLastUpdateTime.QuadPart);
 
     if (shouldUpdatePosition) {
+        newPosition.Position.x += desktopMonitorBounds.left - mVirtualDesktopBounds.left;
+        newPosition.Position.y += desktopMonitorBounds.top - mVirtualDesktopBounds.top;
         mLastUpdateTime = updateTime;
         mPosition = newPosition;
         mPointerOwnerIndex = outputIndex;
         mVisible = newPosition.Visible != 0;
     }
+    // TODO: warn if the mouse is never updated
+    // if it is not updated, that will cause
+    // flickering with RenderPointerTextureStep
 }
 
 DXGI_OUTDUPL_POINTER_SHAPE_INFO DesktopPointer::ShapeInfo() const

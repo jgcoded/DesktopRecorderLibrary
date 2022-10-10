@@ -22,7 +22,7 @@
 class DesktopPointer
 {
 public:
-    DesktopPointer();
+    DesktopPointer(RECT virtualDesktopBounds);
     virtual ~DesktopPointer();
 
     std::size_t BufferSize() const;
@@ -35,7 +35,7 @@ public:
         relative to the monitor that currently owns the pointer
     */
     DXGI_OUTDUPL_POINTER_POSITION Position() const;
-    void UpdatePosition(DXGI_OUTDUPL_POINTER_POSITION newPosition, LARGE_INTEGER updateTime, UINT outputIndex);
+    void UpdatePosition(DXGI_OUTDUPL_POINTER_POSITION newPosition, LARGE_INTEGER updateTime, UINT outputIndex, RECT desktopMonitorBounds);
 
     DXGI_OUTDUPL_POINTER_SHAPE_INFO ShapeInfo() const;
     void ShapeInfo(DXGI_OUTDUPL_POINTER_SHAPE_INFO newShapeInfo);
@@ -54,5 +54,6 @@ private:
     LARGE_INTEGER mLastUpdateTime;
     UINT mPointerOwnerIndex;
     bool mVisible;
+    RECT mVirtualDesktopBounds;
 };
 

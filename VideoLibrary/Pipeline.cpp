@@ -27,29 +27,23 @@
 #include "Pipeline.h"
 
 Pipeline::Pipeline(
-    std::shared_ptr<DesktopMonitor::ScreenDuplicator> duplicator
+    std::shared_ptr<ScreenDuplicator> duplicator,
+    std::shared_ptr<SharedSurface> sharedSurface,
+    RECT virtualDesktopBounds
 )
     : mDuplicator{ duplicator }
+    , mSharedSurface{ sharedSurface }
+    , mVirtualDesktopBounds{ virtualDesktopBounds }
 {
     if (mDuplicator == nullptr)
     {
         throw std::exception("Null duplicator");
     }
 
+    winrt::check_pointer(mSharedSurface.get());
     mShaderCache = std::make_shared<ShaderCache>(mDuplicator->Device());
     mVertexBuffer = std::make_shared<std::vector<Vertex>>();
 
-    mSharedSurface = mDuplicator->VirtualDesktop()->OpenSharedSurfaceWithDevice(mDuplicator->Device());
-    winrt::check_pointer(mSharedSurface.get());
-
-    mKeyedMutex = mSharedSurface.as<IDXGIKeyedMutex>();
-    winrt::check_pointer(mKeyedMutex.get());
-
-    winrt::check_hresult(mDuplicator->Device()->CreateRenderTargetView(
-        mSharedSurface.get(),
-        nullptr,
-        mRenderTargetView.put()
-    ));
 }
 
 Pipeline::~Pipeline()
@@ -63,9 +57,8 @@ void Pipeline::Perform()
     // need to use multithread protect because of Media Foundation api
     // https://docs.microsoft.com/en-us/windows/win32/api/mfobjects/nf-mfobjects-imfdxgidevicemanager-resetdevice#remarks
     DxMultithread multithread{ device.as<ID3D10Multithread>() };
-
     {
-        auto lock = mDuplicator->VirtualDesktop()->LockWithMutex(mKeyedMutex);
+        auto lock = mSharedSurface->Lock();
 
         if (!lock->Locked())
         {
@@ -75,8 +68,8 @@ void Pipeline::Perform()
         CaptureFrameStep captureFrame{ *mDuplicator };
         captureFrame.Perform();
 
-        std::shared_ptr<DesktopMonitor::ScreenDuplicator::Frame> frame = captureFrame.Result();
-
+        std::shared_ptr<Frame> frame = captureFrame.Result();
+        mDesktopMonitorBounds = frame->DesktopMonitorBounds();
         if (frame->Captured())
         {
             if (mTexturePool == nullptr)
@@ -93,14 +86,30 @@ void Pipeline::Perform()
                 AllocateStagingTexture(device, stagingDesc);
             }
 
-            RenderMoveRectsStep renderMoves{ frame, mStagingTexture, mSharedSurface };
+            if (mRenderTargetView == nullptr)
+            {
+                winrt::check_hresult(mDuplicator->Device()->CreateRenderTargetView(
+                    lock->TexturePtr(),
+                    nullptr,
+                    mRenderTargetView.put()
+                ));
+            }
+
+            RenderMoveRectsStep renderMoves{
+                frame,
+                mVirtualDesktopBounds,
+                mStagingTexture,
+                lock->TexturePtr()
+            };
+
             renderMoves.Perform();
 
             RenderDirtyRectsStep renderDirty{
                 frame,
+                mVirtualDesktopBounds,
                 mVertexBuffer,
                 mShaderCache,
-                mSharedSurface,
+                lock->TexturePtr(),
                 mRenderTargetView
             };
             renderDirty.Perform();
@@ -108,10 +117,13 @@ void Pipeline::Perform()
     }
 
     RenderPointerTextureStep renderPointer{
-        mDuplicator,
+        mDuplicator->DesktopPointerPtr(),
+        mSharedSurface,
+        mDuplicator->Device(),
         mShaderCache,
         mTexturePool,
-        mSharedSurface
+        mVirtualDesktopBounds,
+        mDesktopMonitorBounds
     };
     renderPointer.Perform();
 
@@ -138,8 +150,7 @@ winrt::com_ptr<IMFSample> Pipeline::Sample() const
 
 void Pipeline::AllocateTexturePool()
 {
-    D3D11_TEXTURE2D_DESC desc;
-    mSharedSurface->GetDesc(&desc);
+    D3D11_TEXTURE2D_DESC desc = mSharedSurface->Desc();
     // Use the same device that was used to open the shared surface
     // instead of the device used by Desktop Duplication API's desktop image.
     mTexturePool.attach(new TexturePool(mDuplicator->Device(), desc));

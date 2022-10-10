@@ -18,13 +18,9 @@
 */
 
 #include "pch.h"
-#include "RecordingStep.h"
 #include "CaptureFrameStep.h"
-#include "RenderMoveRectsStep.h"
-#include "RenderPointerTextureStep.h"
-#include "Errors.h"
 
-CaptureFrameStep::CaptureFrameStep(DesktopMonitor::ScreenDuplicator& duplicator)
+CaptureFrameStep::CaptureFrameStep(ScreenDuplicator& duplicator)
     : mDupl{ duplicator }
 {
 }
@@ -35,11 +31,10 @@ CaptureFrameStep::~CaptureFrameStep()
 
 void CaptureFrameStep::Perform()
 {
-    auto virtualDesktop = mDupl.VirtualDesktop();
-    mFrame = std::make_shared<DesktopMonitor::ScreenDuplicator::Frame>(mDupl);
+    mFrame = std::make_shared<Frame>(mDupl);
 }
 
-std::shared_ptr<DesktopMonitor::ScreenDuplicator::Frame> CaptureFrameStep::Result()
+std::shared_ptr<Frame> CaptureFrameStep::Result()
 {
     return mFrame;
 }

@@ -23,15 +23,17 @@
 #include "RenderDirtyRectsStep.h"
 
 RenderDirtyRectsStep::RenderDirtyRectsStep(
-    std::shared_ptr<DesktopMonitor::ScreenDuplicator::Frame> frame,
+    std::shared_ptr<Frame> frame,
+    RECT virtualDesktopBounds,
     std::shared_ptr<std::vector<Vertex>> vertexBuffer,
     std::shared_ptr<ShaderCache> shaderCache,
-    winrt::com_ptr<ID3D11Texture2D> sharedSurface,
+    ID3D11Texture2D* sharedSurfacePtr,
     winrt::com_ptr<ID3D11RenderTargetView> renderTargetView)
     : mFrame{ frame }
+    , mVirtualDesktopBounds{ virtualDesktopBounds }
     , mVertexBuffer{ vertexBuffer }
     , mShaderCache{ shaderCache }
-    , mSharedSurface{ sharedSurface }
+    , mSharedSurfacePtr{ sharedSurfacePtr }
     , mRenderTargetView{ renderTargetView }
 {
     if (mFrame == nullptr)
@@ -49,7 +51,7 @@ RenderDirtyRectsStep::RenderDirtyRectsStep(
         throw std::exception("null shader cache");
     }
 
-    winrt::check_pointer(mSharedSurface.get());
+    winrt::check_pointer(mSharedSurfacePtr);
     winrt::check_pointer(mRenderTargetView.get());
 }
 
@@ -74,7 +76,7 @@ void RenderDirtyRectsStep::UpdateDirtyRects()
     mVertexBuffer->resize(mFrame->DirtyRectsCount() * g_VerticesPerRect);
 
     D3D11_TEXTURE2D_DESC sharedSurfaceDesc;
-    mSharedSurface->GetDesc(&sharedSurfaceDesc);
+    mSharedSurfacePtr->GetDesc(&sharedSurfaceDesc);
 
     D3D11_TEXTURE2D_DESC desktopImageDesc;
     mFrame->DesktopImage()->GetDesc(&desktopImageDesc);
@@ -83,9 +85,8 @@ void RenderDirtyRectsStep::UpdateDirtyRects()
     // or else the below vertices position calculations will overflow
     const LONG centerX = (LONG)sharedSurfaceDesc.Width / 2;
     const LONG centerY = (LONG)sharedSurfaceDesc.Height / 2;
-    const RECT virtualDesktopRect = mFrame->VirtualDesktop()->VirtualDesktopBounds();
-    const LONG offsetX = virtualDesktopRect.left;
-    const LONG offsetY = virtualDesktopRect.top;
+    const LONG offsetX = mVirtualDesktopBounds.left;
+    const LONG offsetY = mVirtualDesktopBounds.top;
 
     const RECT desktopBounds = mFrame->DesktopMonitorBounds();
     const LONG desktopWidth = desktopBounds.right - desktopBounds.left;
@@ -243,7 +244,7 @@ void RenderDirtyRectsStep::UpdateDirtyRects()
 void RenderDirtyRectsStep::RenderDirtyRects()
 {
     winrt::com_ptr<ID3D11Device> device;
-    mSharedSurface->GetDevice(device.put());
+    mSharedSurfacePtr->GetDevice(device.put());
 
     winrt::com_ptr<ID3D11DeviceContext> context;
     device->GetImmediateContext(context.put());
@@ -305,7 +306,7 @@ void RenderDirtyRectsStep::RenderDirtyRects()
     context->IASetVertexBuffers(0, 1, bufAddr, &stride, &offset);
 
     D3D11_TEXTURE2D_DESC sharedSurfaceDesc;
-    mSharedSurface->GetDesc(&sharedSurfaceDesc);
+    mSharedSurfacePtr->GetDesc(&sharedSurfaceDesc);
 
     D3D11_VIEWPORT VP;
     VP.Width = static_cast<FLOAT>(sharedSurfaceDesc.Width);

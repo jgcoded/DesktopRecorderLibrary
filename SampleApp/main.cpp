@@ -52,7 +52,7 @@ winrt::com_ptr<IMFMediaType> GetMediaTypeFromMediaSource(winrt::com_ptr<IMFMedia
     return videoMediaType;
 }
 
-winrt::com_ptr<IMFMediaType> GetMediaTypeFromDuplicator(DesktopMonitor::ScreenDuplicator& duplicator)
+winrt::com_ptr<IMFMediaType> GetMediaType(RECT virtualDesktopBounds)
 {
     // create media type
     winrt::com_ptr<IMFMediaType> mediaType;
@@ -63,7 +63,7 @@ winrt::com_ptr<IMFMediaType> GetMediaTypeFromDuplicator(DesktopMonitor::ScreenDu
     const auto inputFormat = MFVideoFormat_ARGB32;
     winrt::check_hresult(mediaType->SetGUID(MF_MT_SUBTYPE, inputFormat));
 
-    auto rect = duplicator.VirtualDesktop()->VirtualDesktopBounds();
+    auto rect = virtualDesktopBounds;
     auto width = rect.right - rect.left;
     auto height = rect.bottom - rect.top;
 
@@ -168,11 +168,7 @@ void PipelineThread(
     int bitRate = (int)settings.Lookup(L"bitrate").GetNumber();
 
     auto virtualDesktop = std::make_shared<VirtualDesktop>();
-
-    std::vector<DesktopMonitor> desktopMonitors = virtualDesktop->GetAllDesktopMonitors();
-    std::shared_ptr<DesktopMonitor::ScreenDuplicator> duplicator = std::move(virtualDesktop->RecordMonitor(desktopMonitors[monitorIndex]));
-
-    com_ptr<IMFMediaType> videoMediaType = GetMediaTypeFromDuplicator(*duplicator);
+    com_ptr<IMFMediaType> videoMediaType = GetMediaType(virtualDesktop->VirtualDesktopBounds());
     com_ptr<IMFMediaSource> audioMediaSource;
     com_ptr<IMFMediaType> audioMediaType;
 
@@ -182,6 +178,21 @@ void PipelineThread(
         audioMediaType = GetMediaTypeFromMediaSource(audioMediaSource);
     }
 
+    std::vector<DesktopMonitor> desktopMonitors = virtualDesktop->DesktopMonitors();
+    std::shared_ptr<DesktopPointer> desktopPointer = std::make_shared<DesktopPointer>(virtualDesktop->VirtualDesktopBounds());
+    std::shared_ptr<ScreenDuplicator> duplicator = std::make_shared<ScreenDuplicator>(
+        desktopMonitors[monitorIndex],
+        desktopPointer
+    );
+    
+    RECT bounds = virtualDesktop->VirtualDesktopBounds();
+    LONG width = bounds.right - bounds.left;
+    LONG height = bounds.bottom - bounds.top;
+    std::shared_ptr<SharedSurface> sharedSurface = std::make_shared<SharedSurface>(
+        duplicator->Device(),
+        width,
+        height
+    );
     std::unique_ptr<ScreenMediaSinkWriter> writer;
     {
         std::wstring fileNameW{ fileName };
@@ -230,7 +241,11 @@ void PipelineThread(
     // Enable away mode and prevent display and system idle timeouts
     (void)SetThreadExecutionState(ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED | ES_AWAYMODE_REQUIRED | ES_CONTINUOUS);
 
-    std::unique_ptr<Pipeline> duplicationPipeline = std::make_unique<Pipeline>(duplicator);
+    std::unique_ptr<Pipeline> duplicationPipeline = std::make_unique<Pipeline>(
+        duplicator,
+        sharedSurface,
+        virtualDesktop->VirtualDesktopBounds()
+    );
 
     while (!stop->load())
     {
@@ -272,21 +287,6 @@ void PipelineThread(
         {
             auto device = duplicator->Device();
             duplicator.reset();
-
-            winrt::com_ptr<ID3D11DeviceContext> context;
-            device->GetImmediateContext(context.put());
-            context->ClearState();
-            context->Flush();
-
-#if _DEBUG
-            auto debug = device.as<ID3D11Debug>();
-            debug->ReportLiveDeviceObjects(D3D11_RLDO_DETAIL);
-#endif
-        }
-
-        {
-            auto device = virtualDesktop->Device();
-            virtualDesktop.reset();
 
             winrt::com_ptr<ID3D11DeviceContext> context;
             device->GetImmediateContext(context.put());

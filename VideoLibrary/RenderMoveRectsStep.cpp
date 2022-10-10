@@ -18,19 +18,20 @@
 */
 
 #include "pch.h"
-#include "VirtualDesktop.h"
 #include "DesktopMonitor.h"
 #include "RenderDirtyRectsStep.h"
 #include "RenderMoveRectsStep.h"
 
 
 RenderMoveRectsStep::RenderMoveRectsStep(
-    std::shared_ptr<DesktopMonitor::ScreenDuplicator::Frame> frame,
+    std::shared_ptr<Frame> frame,
+    RECT virtualDesktopBounds,
     winrt::com_ptr<ID3D11Texture2D> stagingTexture,
-    winrt::com_ptr<ID3D11Texture2D> sharedSurface)
+    ID3D11Texture2D* sharedSurfacePtr)
     : mFrame { frame }
+    , mVirtualDesktopBounds{ virtualDesktopBounds }
     , mStagingTexture{ stagingTexture }
-    , mSharedSurface{ sharedSurface }
+    , mSharedSurfacePtr{ sharedSurfacePtr }
 {
     if (mFrame == nullptr)
     {
@@ -38,7 +39,7 @@ RenderMoveRectsStep::RenderMoveRectsStep(
     }
 
     winrt::check_pointer(mStagingTexture.get());
-    winrt::check_pointer(mSharedSurface.get());
+    winrt::check_pointer(mSharedSurfacePtr);
 }
 
 RenderMoveRectsStep::~RenderMoveRectsStep()
@@ -52,11 +53,9 @@ void RenderMoveRectsStep::Perform()
         return;
     }
 
-    std::shared_ptr<VirtualDesktop> virtualDesktop = mFrame->VirtualDesktop();
     DXGI_OUTDUPL_MOVE_RECT* moveRects = mFrame->MoveRects();
-    const RECT virtualDesktopBounds = virtualDesktop->VirtualDesktopBounds();
-    const LONG offsetX = virtualDesktopBounds.left;
-    const LONG offsetY = virtualDesktopBounds.top;
+    const LONG offsetX = mVirtualDesktopBounds.left;
+    const LONG offsetY = mVirtualDesktopBounds.top;
 
     D3D11_TEXTURE2D_DESC desktopImageDesc;
     mFrame->DesktopImage()->GetDesc(&desktopImageDesc);
@@ -64,7 +63,7 @@ void RenderMoveRectsStep::Perform()
     const LONG desktopHeight = (LONG)desktopImageDesc.Height;
 
     winrt::com_ptr<ID3D11Device> device;
-    mSharedSurface->GetDevice(device.put());
+    mSharedSurfacePtr->GetDevice(device.put());
 
     winrt::com_ptr<ID3D11DeviceContext> context;
     device->GetImmediateContext(context.put());
@@ -141,7 +140,7 @@ void RenderMoveRectsStep::Perform()
             srcRect.left,
             srcRect.top,
             0,
-            mSharedSurface.get(), 0,
+            mSharedSurfacePtr, 0,
             &box
         );
 
@@ -153,7 +152,7 @@ void RenderMoveRectsStep::Perform()
         box.front = 0;
         box.back = 1;
         context->CopySubresourceRegion(
-            mSharedSurface.get(), 0,
+            mSharedSurfacePtr, 0,
             desktopCoordinates.left + dstRect.left - offsetX,
             desktopCoordinates.top + dstRect.top - offsetY,
             0,

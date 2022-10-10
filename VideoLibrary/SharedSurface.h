@@ -19,23 +19,26 @@
 
 #pragma once
 
-#include "RecordingStep.h"
-#include "DesktopMonitor.h"
-#include "ScreenDuplicator.h"
-#include "Frame.h"
+#include "KeyedMutexLock.h"
 
-class CaptureFrameStep :
-    public RecordingStep
+class SharedSurface
 {
 public:
-    CaptureFrameStep(ScreenDuplicator& duplicator);
-    virtual ~CaptureFrameStep();
+    SharedSurface(winrt::com_ptr<ID3D11Device> device, int width, int height);
+    SharedSurface(winrt::com_ptr<ID3D11Device> device, winrt::com_ptr<ID3D11Texture2D> texture, std::shared_ptr<RotatingKeys> rotatingKeys, int width, int height);
 
-    virtual void Perform() override;
-
-    std::shared_ptr<Frame> Result();
-
+    winrt::com_ptr<ID3D11Device> Device() const { return mDevice; }
+    std::unique_ptr<KeyedMutexLock> Lock() const;
+    std::shared_ptr<SharedSurface> OpenSharedSurfaceWithDevice(winrt::com_ptr<ID3D11Device> device) const;
+    D3D11_TEXTURE2D_DESC Desc() const { return mDesc; }
 private:
-    ScreenDuplicator& mDupl;
-    std::shared_ptr<Frame> mFrame;
+
+    winrt::com_ptr<ID3D11Texture2D> mSharedSurface;
+    std::shared_ptr<RotatingKeys> mRotatingKeys;
+    winrt::com_ptr<IDXGIKeyedMutex> mMutex;
+    winrt::com_ptr<ID3D11Device> mDevice;
+    D3D11_TEXTURE2D_DESC mDesc;
+    int mWidth;
+    int mHeight;
 };
+

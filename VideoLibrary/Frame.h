@@ -19,23 +19,47 @@
 
 #pragma once
 
-#include "RecordingStep.h"
-#include "DesktopMonitor.h"
 #include "ScreenDuplicator.h"
-#include "Frame.h"
 
-class CaptureFrameStep :
-    public RecordingStep
+class Frame
 {
 public:
-    CaptureFrameStep(ScreenDuplicator& duplicator);
-    virtual ~CaptureFrameStep();
+    Frame(ScreenDuplicator& duplicator);
+    ~Frame();
 
-    virtual void Perform() override;
+    winrt::com_ptr<ID3D11Texture2D> DesktopImage() const;
 
-    std::shared_ptr<Frame> Result();
+    RECT DesktopMonitorBounds() const;
+
+    int64_t PresentationTime() const;
+
+    bool Captured() const;
+
+    DXGI_MODE_ROTATION Rotation() const;
+
+    DXGI_OUTDUPL_MOVE_RECT* MoveRects() const;
+
+    RECT* DirtyRects() const;
+
+    size_t MoveRectsCount() const;
+
+    size_t DirtyRectsCount() const;
 
 private:
-    ScreenDuplicator& mDupl;
-    std::shared_ptr<Frame> mFrame;
+    RECT mDesktopMonitorBounds;
+    winrt::com_ptr<ID3D11Texture2D> mFrameTexture;
+    DXGI_OUTDUPL_FRAME_INFO mFrameInfo;
+    winrt::com_ptr<IDXGIOutputDuplication> mDupl;
+    std::shared_ptr<std::vector<byte>> mRectBuffer;
+
+    bool mCaptured;
+
+    // move/dirty rects data
+    DXGI_OUTDUPL_MOVE_RECT* mMoveRects;
+    size_t mNumMoveRects;
+
+    RECT* mDirtyRects;
+    size_t mNumDirtyRects;
+
+    DXGI_MODE_ROTATION mRotation;
 };
