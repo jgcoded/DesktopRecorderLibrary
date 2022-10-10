@@ -17,29 +17,33 @@
     along with DesktopRecorderLibrary. If not, see <https://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#include "pch.h"
+#include "Errors.h"
+#include "ScreenDuplicator.h"
 
-#include "Frame.h"
-#include "RecordingStep.h"
-
-class RenderMoveRectsStep : public RecordingStep
+ScreenDuplicator::ScreenDuplicator(DesktopMonitor const& monitor)
+    : mOutput{ monitor.Output()}
+    , mDesktopPointer{ std::make_shared<DesktopPointer>() }
+    , mRectBuffer{ std::make_shared<std::vector<byte>>() }
 {
-public:
-    RenderMoveRectsStep(
-        std::shared_ptr<Frame> frame,
-        RECT virtualDesktopBounds,
-        winrt::com_ptr<ID3D11Texture2D> stagingTexture,
-        ID3D11Texture2D* sharedSurfacePtr);
-    
-    ~RenderMoveRectsStep();
+    HRESULT hr = mOutput->DuplicateOutput(mDevice.get(), mDupl.put());
+    if (FAILED(hr))
+    {
+        ThrowExceptionCheckRecoverable(mDevice, CreateDuplicationExpectedErrors, hr);
+    }
+}
 
-    // Inherited via RecordingStep
-    virtual void Perform() override;
+std::shared_ptr<DesktopPointer> ScreenDuplicator::DesktopPointer()
+{
+    return mDesktopPointer;
+}
 
-private:
-    winrt::com_ptr<ID3D11Texture2D> mStagingTexture;
-    ID3D11Texture2D* mSharedSurfacePtr;
-    std::shared_ptr<Frame> mFrame;
-    RECT mVirtualDesktopBounds;
-};
-
+ScreenDuplicator::~ScreenDuplicator()
+{
+    if (mDupl)
+    {
+        // ignore hr, just release in case this object went out of scope
+        (void)mDupl->ReleaseFrame();
+        mDupl = nullptr;
+    }
+}

@@ -17,29 +17,16 @@
     along with DesktopRecorderLibrary. If not, see <https://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#include "pch.h"
+#include "DxResource.h"
+#include "DisplayAdapter.h"
 
-#include "Frame.h"
-#include "RecordingStep.h"
-
-class RenderMoveRectsStep : public RecordingStep
+DisplayAdapter::DisplayAdapter(winrt::com_ptr<IDXGIAdapter1> const& adapter)
+    : mAdapter{ adapter }
 {
-public:
-    RenderMoveRectsStep(
-        std::shared_ptr<Frame> frame,
-        RECT virtualDesktopBounds,
-        winrt::com_ptr<ID3D11Texture2D> stagingTexture,
-        ID3D11Texture2D* sharedSurfacePtr);
-    
-    ~RenderMoveRectsStep();
+    DXGI_ADAPTER_DESC1 adapterDesc;
+    winrt::check_hresult(mAdapter->GetDesc1(&adapterDesc));
 
-    // Inherited via RecordingStep
-    virtual void Perform() override;
-
-private:
-    winrt::com_ptr<ID3D11Texture2D> mStagingTexture;
-    ID3D11Texture2D* mSharedSurfacePtr;
-    std::shared_ptr<Frame> mFrame;
-    RECT mVirtualDesktopBounds;
-};
-
+    mAdapterName = adapterDesc.Description;
+    mDevice = DxResource::MakeVideoEnabledDevice(mAdapter);
+}

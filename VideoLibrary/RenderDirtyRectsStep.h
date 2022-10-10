@@ -21,16 +21,18 @@
 #include "RecordingStep.h"
 #include "DesktopMonitor.h"
 #include "ShaderCache.h"
+#include "Frame.h"
 #include "Vertex.h"
 
 class RenderDirtyRectsStep : public RecordingStep
 {
 public:
     RenderDirtyRectsStep(
-        std::shared_ptr<DesktopMonitor::ScreenDuplicator::Frame> frame,
+        std::shared_ptr<Frame> frame,
+        RECT virtualDesktopBounds,
         std::shared_ptr<std::vector<Vertex>> vertexBuffer,
         std::shared_ptr<ShaderCache> shaderCache,
-        winrt::com_ptr<ID3D11Texture2D> sharedSurface,
+        ID3D11Texture2D* sharedSurfacePtr,
         winrt::com_ptr<ID3D11RenderTargetView> renderTargetView
         );
     ~RenderDirtyRectsStep();
@@ -44,9 +46,10 @@ private:
 
     void RenderDirtyRects();
 
-    std::shared_ptr<DesktopMonitor::ScreenDuplicator::Frame> mFrame;
+    std::shared_ptr<Frame> mFrame;
+    RECT mVirtualDesktopBounds;
     std::shared_ptr<std::vector<Vertex>> mVertexBuffer;
     std::shared_ptr<ShaderCache> mShaderCache;
-    winrt::com_ptr<ID3D11Texture2D> mSharedSurface;
+    ID3D11Texture2D* mSharedSurfacePtr;
     winrt::com_ptr<ID3D11RenderTargetView> mRenderTargetView;
 };

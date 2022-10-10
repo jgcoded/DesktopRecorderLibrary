@@ -20,18 +20,21 @@
 #pragma once
 
 #include "RecordingStep.h"
-#include "VirtualDesktop.h"
 #include "ShaderCache.h"
 #include "TexturePool.h"
+#include "SharedSurface.h"
 
 class RenderPointerTextureStep : public RecordingStep
 {
 public:
     RenderPointerTextureStep(
-        std::shared_ptr<DesktopMonitor::ScreenDuplicator> screenDuplicator,
+        std::shared_ptr<DesktopPointer> desktopPointer,
+        std::shared_ptr<SharedSurface> sharedSurface,
+        winrt::com_ptr<ID3D11Device> device,
         std::shared_ptr<ShaderCache> shaderCache,
         winrt::com_ptr<TexturePool> texturePool,
-        winrt::com_ptr<ID3D11Texture2D> sharedSurface);
+        RECT virtualDesktopBounds,
+        RECT desktopMonitorBounds);
 
     virtual ~RenderPointerTextureStep();
 
@@ -48,10 +51,16 @@ private:
     void MakeMaskedColorPointerBuffer(UINT * dest, const UINT * colorData, UINT colorPitch, UINT * maskData, UINT maskPitch, UINT width, UINT height, UINT maskX, UINT maskY);
     winrt::com_ptr<ID3D11Texture2D> MakeColorPointer(byte* data, int width, int height);
 
-    std::shared_ptr<DesktopMonitor::ScreenDuplicator> mScreenDuplicator;
+    winrt::com_ptr<ID3D11Device> mDevice;
+    std::shared_ptr<DesktopPointer> mDesktopPointer;
     std::shared_ptr<ShaderCache> mShaderCache;
+    std::shared_ptr<SharedSurface> mSharedSurface;
     winrt::com_ptr<TexturePool> mTexturePool;
-    winrt::com_ptr<ID3D11Texture2D> mSharedSurface;
+
+    ID3D11Texture2D* mSharedSurfacePtr;
 
     winrt::com_ptr<ID3D11Texture2D> mResult;
+
+    RECT mVirtualDesktopBounds;
+    RECT mDesktopMonitorBounds;
 };

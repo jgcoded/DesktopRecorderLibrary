@@ -19,27 +19,20 @@
 
 #pragma once
 
-#include "Frame.h"
-#include "RecordingStep.h"
-
-class RenderMoveRectsStep : public RecordingStep
+class DisplayAdapter
 {
 public:
-    RenderMoveRectsStep(
-        std::shared_ptr<Frame> frame,
-        RECT virtualDesktopBounds,
-        winrt::com_ptr<ID3D11Texture2D> stagingTexture,
-        ID3D11Texture2D* sharedSurfacePtr);
-    
-    ~RenderMoveRectsStep();
 
-    // Inherited via RecordingStep
-    virtual void Perform() override;
+    DisplayAdapter(winrt::com_ptr<IDXGIAdapter1> const& adapter);
+
+    winrt::com_ptr<ID3D11Device> Device() const { return mDevice; }
+
+    std::wstring const& Name() const { return mAdapterName; }
 
 private:
-    winrt::com_ptr<ID3D11Texture2D> mStagingTexture;
-    ID3D11Texture2D* mSharedSurfacePtr;
-    std::shared_ptr<Frame> mFrame;
-    RECT mVirtualDesktopBounds;
-};
 
+    winrt::com_ptr<ID3D11Device> mDevice;
+    winrt::com_ptr<IDXGIAdapter1> mAdapter;
+
+    std::wstring mAdapterName;
+};

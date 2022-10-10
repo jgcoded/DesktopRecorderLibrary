@@ -19,26 +19,47 @@
 
 #pragma once
 
-#include "DesktopMonitor.h"
 #include "ScreenDuplicator.h"
-#include "KeyedMutexLock.h"
 
-class VirtualDesktop
+class Frame
 {
 public:
-    VirtualDesktop();
+    Frame(ScreenDuplicator& duplicator);
+    ~Frame();
 
-    ~VirtualDesktop();
+    winrt::com_ptr<ID3D11Texture2D> DesktopImage() const;
 
-    static std::vector<DesktopMonitor> GetAllDesktopMonitors();
+    RECT DesktopMonitorBounds() const;
 
-    RECT VirtualDesktopBounds() const;
+    int64_t PresentationTime() const;
 
-    static RECT CalculateDesktopMonitorBounds(const std::vector<DesktopMonitor>& desktopMonitors);
+    bool Captured() const;
+
+    DXGI_MODE_ROTATION Rotation() const;
+
+    DXGI_OUTDUPL_MOVE_RECT* MoveRects() const;
+
+    RECT* DirtyRects() const;
+
+    size_t MoveRectsCount() const;
+
+    size_t DirtyRectsCount() const;
 
 private:
+    RECT mDesktopMonitorBounds;
+    winrt::com_ptr<ID3D11Texture2D> mFrameTexture;
+    DXGI_OUTDUPL_FRAME_INFO mFrameInfo;
+    winrt::com_ptr<IDXGIOutputDuplication> mDupl;
+    std::shared_ptr<std::vector<byte>> mRectBuffer;
 
-    std::vector<DesktopMonitor> mDesktopMonitors;
-    RECT mVirtualDesktopBounds;
+    bool mCaptured;
+
+    // move/dirty rects data
+    DXGI_OUTDUPL_MOVE_RECT* mMoveRects;
+    size_t mNumMoveRects;
+
+    RECT* mDirtyRects;
+    size_t mNumDirtyRects;
+
+    DXGI_MODE_ROTATION mRotation;
 };
-

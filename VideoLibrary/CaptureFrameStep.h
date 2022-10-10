@@ -21,20 +21,22 @@
 
 #include "RecordingStep.h"
 #include "DesktopMonitor.h"
+#include "ScreenDuplicator.h"
+#include "Frame.h"
 
 class CaptureFrameStep :
     public RecordingStep
 {
 public:
-    CaptureFrameStep(DesktopMonitor::ScreenDuplicator& duplicator);
+    CaptureFrameStep(ScreenDuplicator& duplicator);
     virtual ~CaptureFrameStep();
 
     virtual void Perform() override;
 
-    std::shared_ptr<DesktopMonitor::ScreenDuplicator::Frame> Result();
+    std::shared_ptr<Frame> Result();
 
 private:
-    DesktopMonitor::ScreenDuplicator& mDupl;
+    ScreenDuplicator& mDupl;
     D3D11_TEXTURE2D_DESC mTextureDesc;
-    std::shared_ptr<DesktopMonitor::ScreenDuplicator::Frame> mFrame;
+    std::shared_ptr<Frame> mFrame;
 };

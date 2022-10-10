@@ -150,6 +150,10 @@
     </FxCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="DisplayAdapter.h" />
+    <ClInclude Include="Frame.h" />
+    <ClInclude Include="ScreenDuplicator.h" />
+    <ClInclude Include="SharedSurface.h" />
     <ClInclude Include="Vertex.h" />
     <ClInclude Include="ShaderCache.h" />
     <ClInclude Include="AudioMedia.h" />
@@ -175,6 +179,9 @@
     <ClInclude Include="VirtualDesktop.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="DisplayAdapter.cpp" />
+    <ClCompile Include="Frame.cpp" />
+    <ClCompile Include="ScreenDuplicator.cpp" />
     <ClCompile Include="ShaderCache.cpp" />
     <ClCompile Include="AudioMedia.cpp" />
     <ClCompile Include="DesktopMonitor.cpp" />
@@ -186,6 +193,7 @@
     <ClCompile Include="RenderPointerTextureStep.cpp" />
     <ClCompile Include="ScreenMediaSinkWriter.cpp" />
     <ClCompile Include="AsyncMediaSourceReader.cpp" />
+    <ClCompile Include="SharedSurface.cpp" />
     <ClCompile Include="TexturePool.cpp" />
     <ClCompile Include="TextureToMediaSampleStep.cpp" />
     <ClCompile Include="pch.cpp">

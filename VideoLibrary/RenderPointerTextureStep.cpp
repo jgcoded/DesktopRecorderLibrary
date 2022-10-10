@@ -26,18 +26,24 @@
 #include "Vertex.h"
 
 RenderPointerTextureStep::RenderPointerTextureStep(
-    std::shared_ptr<DesktopMonitor::ScreenDuplicator> screenDuplicator,
+    std::shared_ptr<DesktopPointer> desktopPointer,
+    std::shared_ptr<SharedSurface> sharedSurface,
+    winrt::com_ptr<ID3D11Device> device,
     std::shared_ptr<ShaderCache> shaderCache,
     winrt::com_ptr<TexturePool> texturePool,
-    winrt::com_ptr<ID3D11Texture2D> sharedSurface)
-    : mScreenDuplicator{ screenDuplicator }
+    RECT virtualDesktopBounds,
+    RECT desktopMonitorBounds)
+    : mDevice{ device }
+    , mSharedSurface{ sharedSurface }
+    , mDesktopPointer{ desktopPointer }
     , mShaderCache{ shaderCache }
     , mTexturePool{ texturePool }
-    , mSharedSurface{ sharedSurface }
+    , mVirtualDesktopBounds{ virtualDesktopBounds }
+    , mDesktopMonitorBounds{ desktopMonitorBounds }
 {
-    if (mScreenDuplicator == nullptr)
+    if (mDesktopPointer == nullptr)
     {
-        throw std::exception("screen duplicator null");
+        throw std::exception("Desktop pointer null");
     }
 
     if (mShaderCache == nullptr)
@@ -45,6 +51,7 @@ RenderPointerTextureStep::RenderPointerTextureStep(
         throw std::exception("render pointer shader cache is null");
     }
 
+    winrt::check_pointer(mDevice.get());
     winrt::check_pointer(mTexturePool.get());
     winrt::check_pointer(mSharedSurface.get());
 }
@@ -55,37 +62,33 @@ RenderPointerTextureStep::~RenderPointerTextureStep()
 
 void RenderPointerTextureStep::Perform()
 {
-    winrt::com_ptr<ID3D11Device> device = mScreenDuplicator->Device();
-    winrt::com_ptr<IDXGIKeyedMutex> mutex = mSharedSurface.as<IDXGIKeyedMutex>();
-    winrt::check_pointer(mutex.get());
 
-    std::shared_ptr<VirtualDesktop> virtualDesktop = mScreenDuplicator->VirtualDesktop();
     // todo in multi monitor scenario see if the pointer is visible for currently drawn monitor
-    auto lock = virtualDesktop->LockWithMutex(mutex);
-
+    auto lock = mSharedSurface->Lock();
     if (!lock->Locked())
     {
         return;
     }
-
+    mSharedSurfacePtr = lock->TexturePtr();
     // copy shared surface
     winrt::com_ptr<ID3D11DeviceContext> context;
-    device->GetImmediateContext(context.put());
+    mDevice->GetImmediateContext(context.put());
 
     winrt::com_ptr<ID3D11Texture2D> virtualDesktopCopy = mTexturePool->Acquire();
 
-    context->CopyResource(virtualDesktopCopy.get(), mSharedSurface.get());
+    context->CopyResource(virtualDesktopCopy.get(), lock->TexturePtr());
 
-    std::shared_ptr<DesktopPointer> desktopPointer = mScreenDuplicator->DesktopPointer();
-    
-    if (!desktopPointer->Visible())
+    if (!mDesktopPointer->Visible())
     {
         mResult = virtualDesktopCopy;
         return;
     }
     
-    POINT pos = desktopPointer->Position().Position;
-    DXGI_OUTDUPL_POINTER_SHAPE_INFO shape = desktopPointer->ShapeInfo();
+    POINT pos = mDesktopPointer->Position().Position;
+    pos.x += mDesktopMonitorBounds.left - mVirtualDesktopBounds.left;
+    pos.y += mDesktopMonitorBounds.top - mVirtualDesktopBounds.top;
+
+    DXGI_OUTDUPL_POINTER_SHAPE_INFO shape = mDesktopPointer->ShapeInfo();
 
     // render pointer to copy
     D3D11_TEXTURE2D_DESC desc;
@@ -135,7 +138,7 @@ void RenderPointerTextureStep::Perform()
     srvDesc.Texture2D.MostDetailedMip = desc.MipLevels - 1;
     srvDesc.Texture2D.MipLevels = desc.MipLevels;
     winrt::com_ptr<ID3D11ShaderResourceView> srView;
-    winrt::check_hresult(device->CreateShaderResourceView(
+    winrt::check_hresult(mDevice->CreateShaderResourceView(
         mouseTexture.get(),
         &srvDesc,
         srView.put()
@@ -157,7 +160,7 @@ void RenderPointerTextureStep::Perform()
     bufferData.SysMemSlicePitch = 0;
     // Create vertex buffer
     winrt::com_ptr<ID3D11Buffer> mouseVertexBuffer;
-    winrt::check_hresult(device->CreateBuffer(
+    winrt::check_hresult(mDevice->CreateBuffer(
         &bufferDesc,
         &bufferData,
         mouseVertexBuffer.put()
@@ -167,7 +170,7 @@ void RenderPointerTextureStep::Perform()
     // need to store RTV per texture in TexturePool
 
     winrt::com_ptr<ID3D11RenderTargetView> rtv;
-    winrt::check_hresult(device->CreateRenderTargetView(
+    winrt::check_hresult(mDevice->CreateRenderTargetView(
         virtualDesktopCopy.get(),
         nullptr,
         rtv.put()
@@ -215,7 +218,7 @@ winrt::com_ptr<ID3D11Texture2D> RenderPointerTextureStep::Result()
 
 winrt::com_ptr<ID3D11Texture2D> RenderPointerTextureStep::MakePointerTexture()
 {
-    auto shapeInfo = mScreenDuplicator->DesktopPointer()->ShapeInfo();
+    auto shapeInfo = mDesktopPointer->ShapeInfo();
 
     switch (shapeInfo.Type) {
     case DXGI_OUTDUPL_POINTER_SHAPE_TYPE_COLOR:
@@ -232,23 +235,19 @@ winrt::com_ptr<ID3D11Texture2D> RenderPointerTextureStep::MakePointerTexture()
 
 winrt::com_ptr<ID3D11Texture2D> RenderPointerTextureStep::MakeColorPointerTexture()
 {
-    auto desktopPointer = mScreenDuplicator->DesktopPointer();
-    auto shapeInfo = desktopPointer->ShapeInfo();
-    return MakeColorPointer(desktopPointer->PutBuffer(), shapeInfo.Width, shapeInfo.Height);
+    auto shapeInfo = mDesktopPointer->ShapeInfo();
+    return MakeColorPointer(mDesktopPointer->PutBuffer(), shapeInfo.Width, shapeInfo.Height);
 }
 
 winrt::com_ptr<ID3D11Texture2D> RenderPointerTextureStep::MakeMaskedPointerTexture()
 {
-    winrt::com_ptr<ID3D11Device> device = mScreenDuplicator->Device();
-    auto desktopPointer = mScreenDuplicator->DesktopPointer();
+    winrt::com_ptr<ID3D11Device> device = mDevice;
 
     // TODO in multi monitor recording, will need to FIRST merge all desktop images and then draw the mouse
-    auto pointerPos = desktopPointer->Position().Position;
-    auto shapeInfo = desktopPointer->ShapeInfo();
+    auto pointerPos = mDesktopPointer->Position().Position;
+    auto shapeInfo = mDesktopPointer->ShapeInfo();
 
-    D3D11_TEXTURE2D_DESC sharedSurfaceDesc;
-    const auto& desc = sharedSurfaceDesc;
-    mSharedSurface->GetDesc(&sharedSurfaceDesc);
+    const auto& desc = mSharedSurface->Desc();
 
     int left = pointerPos.x;
     int top = pointerPos.y;
@@ -309,7 +308,7 @@ winrt::com_ptr<ID3D11Texture2D> RenderPointerTextureStep::MakeMaskedPointerTextu
     context->CopySubresourceRegion(
         desktopCopy.get(),
         0, 0, 0, 0,
-        mSharedSurface.get(), 0, &box);
+        mSharedSurfacePtr, 0, &box);
 
     auto desktopSurface = desktopCopy.as<IDXGISurface>();
     std::vector<UINT> dest;
@@ -323,7 +322,7 @@ winrt::com_ptr<ID3D11Texture2D> RenderPointerTextureStep::MakeMaskedPointerTextu
         return nullptr;
     }
 
-    auto maskData = desktopPointer->PutBuffer();
+    auto maskData = mDesktopPointer->PutBuffer();
 
     if (shapeInfo.Type == DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MONOCHROME) {
         MakeMonochromePointerBuffer(dest.data(), textureData, mapped.Pitch, maskData, shapeInfo.Pitch, width, height, maskX, maskY, shapeInfo.Height / 2);
@@ -411,7 +410,7 @@ void RenderPointerTextureStep::MakeMaskedColorPointerBuffer(UINT * dest, const U
 
 winrt::com_ptr<ID3D11Texture2D> RenderPointerTextureStep::MakeColorPointer(byte * data, int width, int height)
 {
-    winrt::com_ptr<ID3D11Device> device = mScreenDuplicator->Device();
+    winrt::com_ptr<ID3D11Device> device = mDevice;
 
     D3D11_TEXTURE2D_DESC desc;
     desc.Width = width;
