@@ -60,4 +60,10 @@ private:
     winrt::com_ptr<ID3D11RenderTargetView> mRenderTargetView;
     RECT mVirtualDesktopBounds;
     RECT mDesktopMonitorBounds;
+    // GPU present-time tracking. QPF is queried once; the baseline is
+    // captured from the first frame DDA delivers with a real present time
+    // so the emitted sample timeline starts at 0.
+    LARGE_INTEGER mQpcFrequency;
+    int64_t mPresentationTimeBaselineQpc;
+    bool mPresentationTimeBaselineSet;
 };

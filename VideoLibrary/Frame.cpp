@@ -129,19 +129,10 @@ RECT Frame::DesktopMonitorBounds() const
 
 int64_t Frame::PresentationTime() const
 {
-    //    LARGE_INTEGER frequency;
-      //  QueryPerformanceFrequency(&frequency);
-
-    int64_t nanoSeconds = mFrameInfo.LastPresentTime.QuadPart;
-
-    // ticks / ticks per second = seconds
-    // save precision by dividing first and then multipling by 1e9 (1e9 ns in one sec)
-
-  //  nanoSeconds /= frequency.QuadPart;
-  //  nanoSeconds *= 1'000'000'000;
-
-
-    return nanoSeconds;
+    // Raw QPC ticks of when the GPU presented this frame. Convert via
+    // QueryPerformanceFrequency. Returns 0 when DDA didn't report a
+    // present time (e.g. AcquireNextFrame timeout).
+    return mFrameInfo.LastPresentTime.QuadPart;
 }
 
 bool Frame::Captured() const

@@ -220,10 +220,22 @@ void ScreenMediaSinkWriter::WriteSample(IMFSample* sample)
 
     if (sampleType == MFMediaType_Video)
     {
-        auto frameCaptureTime = std::chrono::high_resolution_clock::now();
-        auto frameTime = (frameCaptureTime - mWriteStartTime).count() / 100;
-
-        winrt::check_hresult(sample->SetSampleTime(frameTime));
+        // If the caller (Pipeline) already attached a presentation time
+        // derived from the GPU's frame present timestamp, keep it. That
+        // preserves the encoded timeline through dropped/skipped frames.
+        // Otherwise fall back to wall-clock relative to Begin().
+        LONGLONG existingTime = 0;
+        HRESULT timeHr = sample->GetSampleTime(&existingTime);
+        if (timeHr == MF_E_NO_SAMPLE_TIMESTAMP)
+        {
+            auto frameCaptureTime = std::chrono::high_resolution_clock::now();
+            auto frameTime = (frameCaptureTime - mWriteStartTime).count() / 100;
+            winrt::check_hresult(sample->SetSampleTime(frameTime));
+        }
+        else
+        {
+            winrt::check_hresult(timeHr);
+        }
         winrt::check_hresult(sample->SetSampleDuration(mVideoFrameDuration));
 
         mSinkWriter->WriteSample(mVideoStreamIndex, sample);

@@ -35,7 +35,10 @@ Pipeline::Pipeline(
     , mSharedSurface{ sharedSurface }
     , mGpuVertexBufferCapacity{ 0 }
     , mVirtualDesktopBounds{ virtualDesktopBounds }
+    , mPresentationTimeBaselineQpc{ 0 }
+    , mPresentationTimeBaselineSet{ false }
 {
+    QueryPerformanceFrequency(&mQpcFrequency);
     if (mDuplicator == nullptr)
     {
         throw std::exception("Null duplicator");
@@ -58,6 +61,7 @@ void Pipeline::Perform()
     // need to use multithread protect because of Media Foundation api
     // https://docs.microsoft.com/en-us/windows/win32/api/mfobjects/nf-mfobjects-imfdxgidevicemanager-resetdevice#remarks
     DxMultithread multithread{ device.as<ID3D10Multithread>() };
+    int64_t framePresentationTimeQpc = 0;
     {
         auto lock = mSharedSurface->Lock();
 
@@ -71,6 +75,7 @@ void Pipeline::Perform()
 
         std::shared_ptr<Frame> frame = captureFrame.Result();
         mDesktopMonitorBounds = frame->DesktopMonitorBounds();
+        framePresentationTimeQpc = frame->PresentationTime();
         if (frame->Captured())
         {
             if (mTexturePool == nullptr)
@@ -144,6 +149,26 @@ void Pipeline::Perform()
     convertTexture.Perform();
 
     mSample = convertTexture.Result();
+
+    // Tag the sample with the GPU present time of the frame this output
+    // is derived from. The sink writer treats sample time as authoritative
+    // when set, so dropped frames don't compress the encoded timeline
+    // (which they would with a wall-clock-at-write strategy).
+    if (mSample && framePresentationTimeQpc > 0 && mQpcFrequency.QuadPart > 0)
+    {
+        if (!mPresentationTimeBaselineSet)
+        {
+            mPresentationTimeBaselineQpc = framePresentationTimeQpc;
+            mPresentationTimeBaselineSet = true;
+        }
+        int64_t elapsedQpc = framePresentationTimeQpc - mPresentationTimeBaselineQpc;
+        int64_t qpf = mQpcFrequency.QuadPart;
+        // Split-multiply to avoid overflowing int64 on long recordings
+        // when qpf is not a power-of-10 divisor of 10_000_000.
+        int64_t sampleTime100ns = (elapsedQpc / qpf) * 10'000'000
+            + (elapsedQpc % qpf) * 10'000'000 / qpf;
+        winrt::check_hresult(mSample->SetSampleTime(sampleTime100ns));
+    }
 }
 
 winrt::com_ptr<IMFSample> Pipeline::Sample() const
