@@ -171,10 +171,13 @@ ScreenMediaSinkWriter::ScreenMediaSinkWriter(const EncodingContext& encodingCont
     if (SUCCEEDED(mAudioInputMediaType->GetUINT32(MF_MT_AUDIO_NUM_CHANNELS, &sourceChannels))
         && sourceChannels > 0)
     {
-        // Scale bitrate proportionally if we deviate from the profile's
-        // default channel count, so dropping stereo->mono doesn't waste
-        // bits on a phantom channel and upmixing doesn't starve them.
-        if (audioNumChannels > 0 && sourceChannels != audioNumChannels)
+        // Only scale UP when the source has more channels than the
+        // profile (very unusual). Don't scale DOWN for mono: a "High"
+        // quality choice should mean High whether the source is mono
+        // or stereo. Mono at the profile's nominal stereo bitrate is
+        // unambiguously high-quality voice (192 kbps AAC mono is far
+        // beyond conference-call needs).
+        if (audioNumChannels > 0 && sourceChannels > audioNumChannels)
         {
             audioBitrate = static_cast<UINT32>(
                 (static_cast<uint64_t>(audioBitrate) * sourceChannels) / audioNumChannels);
