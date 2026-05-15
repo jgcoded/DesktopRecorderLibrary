@@ -22,8 +22,20 @@
 
 void EnableDebugOnDevice(winrt::com_ptr<ID3D11Device> device)
 {
-    winrt::com_ptr<ID3D11Debug> debug{ device.as<ID3D11Debug>() };
-    winrt::com_ptr<ID3D11InfoQueue> info{ debug.as<ID3D11InfoQueue>() };
+    // ID3D11Debug / ID3D11InfoQueue are only present when the device was
+    // created with D3D11_CREATE_DEVICE_DEBUG *and* the Graphics Tools
+    // optional Windows feature is installed. If either is missing, fall
+    // out silently rather than throwing from a QI failure.
+    auto debug = device.try_as<ID3D11Debug>();
+    if (!debug)
+    {
+        return;
+    }
+    auto info = debug.try_as<ID3D11InfoQueue>();
+    if (!info)
+    {
+        return;
+    }
     info->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_CORRUPTION, true);
     info->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_ERROR, true);
     //info->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_WARNING, true);
@@ -32,24 +44,51 @@ void EnableDebugOnDevice(winrt::com_ptr<ID3D11Device> device)
     info->SetMuteDebugOutput(false);
 }
 
-winrt::com_ptr<ID3D11Device> DxResource::MakeDevice()
+namespace
 {
-    winrt::com_ptr<ID3D11Device> device;
+    // Create an ID3D11Device, requesting the debug layer in Debug builds.
+    // Retries without the debug flag if the D3D11 SDK layers
+    // (Graphics Tools optional feature) are not installed on the host.
+    winrt::com_ptr<ID3D11Device> CreateDeviceWithOptionalDebug(
+        IDXGIAdapter1* adapter,
+        D3D_DRIVER_TYPE driverType,
+        UINT baseFlags)
+    {
+        winrt::com_ptr<ID3D11Device> device;
 
-    int flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+        auto create = [&](UINT flags)
+        {
+            return D3D11CreateDevice(
+                adapter, driverType, nullptr,
+                flags,
+                nullptr, 0,
+                D3D11_SDK_VERSION,
+                device.put(),
+                nullptr,
+                nullptr);
+        };
+
 #ifdef _DEBUG
-    flags |= D3D11_CREATE_DEVICE_DEBUG;
+        HRESULT hr = create(baseFlags | D3D11_CREATE_DEVICE_DEBUG);
+        if (hr == DXGI_ERROR_SDK_COMPONENT_MISSING)
+        {
+            hr = create(baseFlags);
+        }
+        winrt::check_hresult(hr);
+#else
+        winrt::check_hresult(create(baseFlags));
 #endif
 
-    winrt::check_hresult(D3D11CreateDevice(
-        nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
-        flags,
-        nullptr, 0,
-        D3D11_SDK_VERSION,
-        device.put(),
+        return device;
+    }
+}
+
+winrt::com_ptr<ID3D11Device> DxResource::MakeDevice()
+{
+    auto device = CreateDeviceWithOptionalDebug(
         nullptr,
-        nullptr
-    ));
+        D3D_DRIVER_TYPE_HARDWARE,
+        D3D11_CREATE_DEVICE_BGRA_SUPPORT);
 
     winrt::com_ptr<ID3D10Multithread> multithread{ device.as<ID3D10Multithread>() };
     multithread->SetMultithreadProtected(true);
@@ -63,24 +102,12 @@ winrt::com_ptr<ID3D11Device> DxResource::MakeDevice()
 
 winrt::com_ptr<ID3D11Device> DxResource::MakeVideoEnabledDevice(winrt::com_ptr<IDXGIAdapter1> const& adapter)
 {
-    winrt::com_ptr<ID3D11Device> device;
-
     // This flag is needed by Media Foundation:
     // https://docs.microsoft.com/en-us/windows/win32/api/mfapi/nf-mfapi-mfcreatedxgidevicemanager#remarks
-    int flags = D3D11_CREATE_DEVICE_VIDEO_SUPPORT;
-#ifdef _DEBUG
-    flags |= D3D11_CREATE_DEVICE_DEBUG;
-#endif
-
-    winrt::check_hresult(D3D11CreateDevice(
-        adapter.get(), D3D_DRIVER_TYPE_UNKNOWN, nullptr,
-        flags,
-        nullptr, 0,
-        D3D11_SDK_VERSION,
-        device.put(),
-        nullptr,
-        nullptr
-    ));
+    auto device = CreateDeviceWithOptionalDebug(
+        adapter.get(),
+        D3D_DRIVER_TYPE_UNKNOWN,
+        D3D11_CREATE_DEVICE_VIDEO_SUPPORT);
 
     winrt::com_ptr<ID3D10Multithread> multithread{ device.as<ID3D10Multithread>() };
     multithread->SetMultithreadProtected(true);
