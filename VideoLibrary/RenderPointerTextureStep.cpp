@@ -187,15 +187,7 @@ void RenderPointerTextureStep::Perform()
         mouseVertexBuffer.put()
     ));
 
-    // TODO why create RTV per texture?? for now just do it but
-    // need to store RTV per texture in TexturePool
-
-    winrt::com_ptr<ID3D11RenderTargetView> rtv;
-    winrt::check_hresult(mDevice->CreateRenderTargetView(
-        virtualDesktopCopy.get(),
-        nullptr,
-        rtv.put()
-    ));
+    auto rtv = mTexturePool->RtvFor(virtualDesktopCopy.get());
     auto render = rtv.get();
     ID3D11RenderTargetView** rtvAddr = &render;
 

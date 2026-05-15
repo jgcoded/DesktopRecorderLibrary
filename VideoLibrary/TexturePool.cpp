@@ -43,6 +43,24 @@ winrt::com_ptr<ID3D11Texture2D> TexturePool::Acquire()
     return texture;
 }
 
+winrt::com_ptr<ID3D11RenderTargetView> TexturePool::RtvFor(ID3D11Texture2D* texture)
+{
+    winrt::check_pointer(texture);
+    std::lock_guard<std::mutex> lock{ mMutex };
+    auto it = mRtvCache.find(texture);
+    if (it != mRtvCache.end())
+    {
+        return it->second;
+    }
+    winrt::com_ptr<ID3D11RenderTargetView> rtv;
+    winrt::check_hresult(mDevice->CreateRenderTargetView(texture, nullptr, rtv.put()));
+    // The RTV refcounts the texture, so this cache also pins the
+    // textures it indexes — which is fine because the pool is meant to
+    // own its textures for the life of the recording.
+    mRtvCache.emplace(texture, rtv);
+    return rtv;
+}
+
 HRESULT __stdcall TexturePool::GetParameters(DWORD * pdwFlags, DWORD * pdwQueue)
 {
     UNREFERENCED_PARAMETER(pdwFlags);
