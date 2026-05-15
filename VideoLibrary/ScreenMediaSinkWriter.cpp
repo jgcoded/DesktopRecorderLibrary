@@ -88,13 +88,21 @@ ScreenMediaSinkWriter::ScreenMediaSinkWriter(const EncodingContext& encodingCont
 
     winrt::check_hresult(mVideoOutputMediaType->SetUINT32(MF_MT_AVG_BITRATE, bitRate));
     winrt::check_hresult(mVideoOutputMediaType->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive));
-    // Desktop pixels are full-range 0..255; tag the encoded stream so
-    // players don't re-expand 16..235 -> 0..255 and crush blacks. Pair
-    // with the BT.709 matrix/primaries assumed by every modern HD H.264
-    // player so YUV<->RGB conversion is consistent.
-    winrt::check_hresult(mVideoOutputMediaType->SetUINT32(MF_MT_VIDEO_NOMINAL_RANGE, MFNominalRange_0_255));
+    // The encoder emits *limited-range* BT.709 YUV regardless of our
+    // earlier full-range hints (verified empirically via ffprobe pixel
+    // sampling — stored values clip at [16, 235]). Tag the output to
+    // match that reality so Windows Media Player / Movies & TV doesn't
+    // try to "expand" what's already supposed to be RGB-space, which
+    // shows up as oversaturated chroma and lifted blacks.
+    //
+    // All four of NOMINAL_RANGE, YUV_MATRIX, VIDEO_PRIMARIES, and
+    // TRANSFER_FUNCTION must be set together for the MP4 sink to emit
+    // a `colr` atom in the container — that's the only signal these
+    // players read when the H.264 SPS VUI is absent.
+    winrt::check_hresult(mVideoOutputMediaType->SetUINT32(MF_MT_VIDEO_NOMINAL_RANGE, MFNominalRange_16_235));
     winrt::check_hresult(mVideoOutputMediaType->SetUINT32(MF_MT_YUV_MATRIX, MFVideoTransferMatrix_BT709));
     winrt::check_hresult(mVideoOutputMediaType->SetUINT32(MF_MT_VIDEO_PRIMARIES, MFVideoPrimaries_BT709));
+    winrt::check_hresult(mVideoOutputMediaType->SetUINT32(MF_MT_TRANSFER_FUNCTION, MFVideoTransFunc_709));
     winrt::check_hresult(MFSetAttributeSize(mVideoOutputMediaType.get(), MF_MT_FRAME_SIZE, width, height));
     winrt::check_hresult(MFSetAttributeRatio(mVideoOutputMediaType.get(), MF_MT_FRAME_RATE, frameRate.Numerator(), frameRate.Denominator()));
     winrt::check_hresult(mSinkWriter->AddStream(mVideoOutputMediaType.get(), &mVideoStreamIndex));
@@ -124,8 +132,14 @@ ScreenMediaSinkWriter::ScreenMediaSinkWriter(const EncodingContext& encodingCont
             VARIANT range;
             VariantInit(&range);
             range.vt = VT_UI4;
+            // Input *is* full-range RGB (ARGB32 desktop pixels). Output is
+            // limited-range YUV, which is what the encoder is actually
+            // emitting regardless of what we asked for previously. Telling
+            // ICodecAPI about both ranges separately lets the encoder pick
+            // the right RGB->YUV conversion matrix internally.
             range.ulVal = eAVEncVideoColorNominalRange_0_255;
             HRESULT setIn = codec->SetValue(&CODECAPI_AVEncVideoInputColorNominalRange, &range);
+            range.ulVal = eAVEncVideoColorNominalRange_16_235;
             HRESULT setOut = codec->SetValue(&CODECAPI_AVEncVideoOutputColorNominalRange, &range);
             VariantClear(&range);
             ss << L"  SetValue(Input)=0x" << setIn
