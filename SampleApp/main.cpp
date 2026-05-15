@@ -53,6 +53,13 @@ winrt::com_ptr<IMFMediaType> GetMediaType(RECT virtualDesktopBounds)
 
     winrt::check_hresult(MFSetAttributeSize(mediaType.get(), MF_MT_FRAME_SIZE, width, height));
 
+    // ARGB32 desktop pixels are full-range 0..255. Without this tag the
+    // H.264 encoder assumes 16..235 studio range, which crushes blacks
+    // and washes out highlights; the encoded stream is also tagged as
+    // limited-range so players "expand" 16..235 -> 0..255, compounding
+    // the damage. Tag the pipeline as full-range end to end.
+    winrt::check_hresult(mediaType->SetUINT32(MF_MT_VIDEO_NOMINAL_RANGE, MFNominalRange_0_255));
+
     return mediaType;
 }
 

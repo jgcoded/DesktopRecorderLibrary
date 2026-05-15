@@ -87,6 +87,13 @@ ScreenMediaSinkWriter::ScreenMediaSinkWriter(const EncodingContext& encodingCont
 
     winrt::check_hresult(mVideoOutputMediaType->SetUINT32(MF_MT_AVG_BITRATE, bitRate));
     winrt::check_hresult(mVideoOutputMediaType->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive));
+    // Desktop pixels are full-range 0..255; tag the encoded stream so
+    // players don't re-expand 16..235 -> 0..255 and crush blacks. Pair
+    // with the BT.709 matrix/primaries assumed by every modern HD H.264
+    // player so YUV<->RGB conversion is consistent.
+    winrt::check_hresult(mVideoOutputMediaType->SetUINT32(MF_MT_VIDEO_NOMINAL_RANGE, MFNominalRange_0_255));
+    winrt::check_hresult(mVideoOutputMediaType->SetUINT32(MF_MT_YUV_MATRIX, MFVideoTransferMatrix_BT709));
+    winrt::check_hresult(mVideoOutputMediaType->SetUINT32(MF_MT_VIDEO_PRIMARIES, MFVideoPrimaries_BT709));
     winrt::check_hresult(MFSetAttributeSize(mVideoOutputMediaType.get(), MF_MT_FRAME_SIZE, width, height));
     winrt::check_hresult(MFSetAttributeRatio(mVideoOutputMediaType.get(), MF_MT_FRAME_RATE, frameRate.Numerator(), frameRate.Denominator()));
     winrt::check_hresult(mSinkWriter->AddStream(mVideoOutputMediaType.get(), &mVideoStreamIndex));
