@@ -110,6 +110,25 @@ void Pipeline::Perform()
 
             renderMoves.Perform();
 
+            // Translate the duplicator's reported DXGI color space into
+            // the shader's conversion mode. SDR sRGB needs no work; the
+            // two common HDR Windows modes each take a different path.
+            ColorSpaceCBData csParams{};
+            csParams.sdrWhiteNits = 100.0f;
+            switch (mDuplicator->ColorSpace())
+            {
+            case DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709:
+                csParams.conversionMode = ColorSpaceCBData::ScRgbLinearToSrgb;
+                break;
+            case DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020:
+            case DXGI_COLOR_SPACE_RGB_STUDIO_G2084_NONE_P2020:
+                csParams.conversionMode = ColorSpaceCBData::Hdr10PqToSrgb;
+                break;
+            default:
+                csParams.conversionMode = ColorSpaceCBData::None;
+                break;
+            }
+
             RenderDirtyRectsStep renderDirty{
                 frame,
                 mVirtualDesktopBounds,
@@ -118,7 +137,8 @@ void Pipeline::Perform()
                 mGpuVertexBufferCapacity,
                 mShaderCache,
                 lock->TexturePtr(),
-                mRenderTargetView
+                mRenderTargetView,
+                csParams
             };
             renderDirty.Perform();
         }

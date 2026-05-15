@@ -18,6 +18,7 @@
 */
 
 #include "pch.h"
+#include <sstream>
 #include "Errors.h"
 #include "ScreenDuplicator.h"
 
@@ -29,11 +30,36 @@ ScreenDuplicator::ScreenDuplicator(
     , mDesktopPointer{ desktopPointer }
     , mRectBuffer{ std::make_shared<std::vector<byte>>() }
     , mOutputIndex{ monitor.OutputIndex() }
+    , mColorSpace{ DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709 }
 {
     HRESULT hr = mOutput->DuplicateOutput(mDevice.get(), mDupl.put());
     if (FAILED(hr))
     {
         ThrowExceptionCheckRecoverable(mDevice, CreateDuplicationExpectedErrors, hr);
+    }
+
+    // Read the output's color space + per-channel bit depth. With HDR
+    // enabled in Windows, DDA hands us framebuffer pixels in scRGB
+    // (linear Rec.709, FP16) or HDR10 (PQ-encoded Rec.2020, 10-bit
+    // UNORM). Treating those values as sRGB downstream produces the
+    // oversaturated-reds look users see in Movies & TV.
+    {
+        winrt::com_ptr<IDXGIOutput6> output6;
+        if (SUCCEEDED(mOutput->QueryInterface(__uuidof(IDXGIOutput6), output6.put_void())))
+        {
+            DXGI_OUTPUT_DESC1 desc1{};
+            if (SUCCEEDED(output6->GetDesc1(&desc1)))
+            {
+                mColorSpace = desc1.ColorSpace;
+                std::wstringstream ss;
+                ss << L"ScreenDuplicator: ColorSpace=" << static_cast<int>(mColorSpace)
+                   << L" BitsPerColor=" << desc1.BitsPerColor
+                   << L" MinLuma=" << desc1.MinLuminance
+                   << L" MaxLuma=" << desc1.MaxLuminance
+                   << L" MaxFullFrameLuma=" << desc1.MaxFullFrameLuminance << L"\n";
+                OutputDebugStringW(ss.str().c_str());
+            }
+        }
     }
 }
 

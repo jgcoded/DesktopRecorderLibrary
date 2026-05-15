@@ -44,6 +44,12 @@ public:
 
     std::shared_ptr<std::vector<byte>> Buffer() const { return mRectBuffer; };
 
+    // The DXGI color space the framebuffer is in, as reported by the
+    // monitor. Used by the dirty-rects shader to decide whether to
+    // emit sRGB-encoded pixels (typical desktop) or convert from HDR
+    // (scRGB linear / HDR10 PQ Rec.2020) into SDR sRGB.
+    DXGI_COLOR_SPACE_TYPE ColorSpace() const { return mColorSpace; }
+
     ~ScreenDuplicator();
 
 private:
@@ -58,4 +64,6 @@ private:
     std::shared_ptr<std::vector<byte>> mRectBuffer;
 
     std::shared_ptr<DesktopPointer> mDesktopPointer;
+
+    DXGI_COLOR_SPACE_TYPE mColorSpace;
 };

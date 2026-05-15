@@ -207,6 +207,12 @@ void RenderPointerTextureStep::Perform()
     context->PSSetShader(mShaderCache->PixelShader().get(), nullptr, 0);
     context->PSSetShaderResources(0, 1, srvPtr);
     context->PSSetSamplers(0, 1, samplerPtr);
+    // The cursor texture is already sRGB regardless of the desktop's
+    // color space, and we're rendering onto the shared surface which
+    // the dirty-rects step has already converted to sRGB. So this step
+    // must NOT re-apply HDR conversion or we'd double-encode gamma.
+    ColorSpaceCBData identity{ ColorSpaceCBData::None, 100.0f, 0.0f, 0.0f };
+    mShaderCache->BindColorSpaceConversion(context.get(), identity);
     context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
     D3D11_VIEWPORT VP;

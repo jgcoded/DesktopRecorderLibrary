@@ -35,7 +35,8 @@ public:
         UINT& gpuVertexBufferCapacity,
         std::shared_ptr<ShaderCache> shaderCache,
         ID3D11Texture2D* sharedSurfacePtr,
-        winrt::com_ptr<ID3D11RenderTargetView> renderTargetView
+        winrt::com_ptr<ID3D11RenderTargetView> renderTargetView,
+        ColorSpaceCBData colorSpaceParams
         );
     ~RenderDirtyRectsStep();
 
@@ -57,4 +58,5 @@ private:
     std::shared_ptr<ShaderCache> mShaderCache;
     ID3D11Texture2D* mSharedSurfacePtr;
     winrt::com_ptr<ID3D11RenderTargetView> mRenderTargetView;
+    ColorSpaceCBData mColorSpaceParams;
 };

@@ -30,7 +30,8 @@ RenderDirtyRectsStep::RenderDirtyRectsStep(
     UINT& gpuVertexBufferCapacity,
     std::shared_ptr<ShaderCache> shaderCache,
     ID3D11Texture2D* sharedSurfacePtr,
-    winrt::com_ptr<ID3D11RenderTargetView> renderTargetView)
+    winrt::com_ptr<ID3D11RenderTargetView> renderTargetView,
+    ColorSpaceCBData colorSpaceParams)
     : mFrame{ frame }
     , mVirtualDesktopBounds{ virtualDesktopBounds }
     , mVertexBuffer{ vertexBuffer }
@@ -39,6 +40,7 @@ RenderDirtyRectsStep::RenderDirtyRectsStep(
     , mShaderCache{ shaderCache }
     , mSharedSurfacePtr{ sharedSurfacePtr }
     , mRenderTargetView{ renderTargetView }
+    , mColorSpaceParams{ colorSpaceParams }
 {
     if (mFrame == nullptr)
     {
@@ -285,6 +287,9 @@ void RenderDirtyRectsStep::RenderDirtyRects()
     context->PSSetShader(mShaderCache->PixelShader().get(), nullptr, 0);
     context->PSSetShaderResources(0, 1, srvPtr);
     context->PSSetSamplers(0, 1, samplerPtr);
+    // Tell the shader what color space the desktop pixels are in so HDR
+    // sources get converted to sRGB before we hand them to the encoder.
+    mShaderCache->BindColorSpaceConversion(context.get(), mColorSpaceParams);
     context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
     const UINT requiredBytes = static_cast<UINT>(mVertexBuffer->size() * sizeof(Vertex));
