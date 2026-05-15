@@ -18,7 +18,6 @@
 */
 
 #include "pch.h"
-#include <sstream>
 #include "Errors.h"
 #include "Frame.h"
 
@@ -52,21 +51,9 @@ Frame::Frame(ScreenDuplicator& duplicator)
         // Capture the DXGI format so Pipeline can pick a per-frame
         // color conversion. DDA flips between BGRA8 and FP16 when HDR
         // is enabled depending on whether any HDR content is on screen.
-        {
-            D3D11_TEXTURE2D_DESC td{};
-            mFrameTexture->GetDesc(&td);
-            mFormat = td.Format;
-
-            static DXGI_FORMAT lastFormat = DXGI_FORMAT_UNKNOWN;
-            if (td.Format != lastFormat)
-            {
-                lastFormat = td.Format;
-                std::wstringstream ss;
-                ss << L"Frame: DDA texture format=" << static_cast<int>(td.Format)
-                   << L" (" << td.Width << L"x" << td.Height << L")\n";
-                OutputDebugStringW(ss.str().c_str());
-            }
-        }
+        D3D11_TEXTURE2D_DESC td{};
+        mFrameTexture->GetDesc(&td);
+        mFormat = td.Format;
 
         // Don't care about move or dirty rects, just get the pointer data and update the pointer cache
         if (mFrameInfo.LastMouseUpdateTime.QuadPart != 0 && mFrameInfo.PointerShapeBufferSize != 0) {

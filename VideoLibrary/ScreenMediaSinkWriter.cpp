@@ -18,7 +18,6 @@
 */
 
 #include "pch.h"
-#include <sstream>
 #include "DxResource.h"
 #include "ScreenMediaSinkWriter.h"
 
@@ -110,42 +109,27 @@ ScreenMediaSinkWriter::ScreenMediaSinkWriter(const EncodingContext& encodingCont
     // set video input media type
     winrt::check_hresult(mSinkWriter->SetInputMediaType(mVideoStreamIndex, mVideoInputMediaType.get(), nullptr));
 
-    // The H.264 encoder MFT doesn't reliably honor MF_MT_VIDEO_NOMINAL_RANGE
-    // on the media type — it ignores the attribute on some builds and emits
-    // a limited-range stream tag regardless. Try ICodecAPI as a fallback;
-    // log every HRESULT so we can tell whether the encoder accepted it or
-    // rejected it (ffprobe inspection of past output suggested rejection).
+    // Best-effort: ask the encoder via ICodecAPI to use 0-255 RGB input
+    // and 16-235 YUV output for its internal color conversion. Microsoft's
+    // built-in H.264 MFT returns E_NOTIMPL on both properties (verified
+    // empirically), so this is a no-op there; left in place because
+    // third-party encoders sometimes honor it. The MP4 container's colr
+    // atom is what actually carries the tags downstream.
     {
         winrt::com_ptr<ICodecAPI> codec;
-        HRESULT codecHr = mSinkWriter->GetServiceForStream(
-            mVideoStreamIndex, GUID_NULL, IID_PPV_ARGS(codec.put()));
-        std::wstringstream ss;
-        ss << L"ScreenMediaSinkWriter ICodecAPI: GetServiceForStream hr=0x"
-            << std::hex << codecHr << L" codec=" << (codec ? L"yes" : L"no") << L"\n";
-        if (SUCCEEDED(codecHr) && codec)
+        if (SUCCEEDED(mSinkWriter->GetServiceForStream(
+                mVideoStreamIndex, GUID_NULL, IID_PPV_ARGS(codec.put())))
+            && codec)
         {
-            HRESULT inSupported = codec->IsSupported(&CODECAPI_AVEncVideoInputColorNominalRange);
-            HRESULT outSupported = codec->IsSupported(&CODECAPI_AVEncVideoOutputColorNominalRange);
-            ss << L"  IsSupported(Input)=0x" << inSupported
-                << L" IsSupported(Output)=0x" << outSupported << L"\n";
-
             VARIANT range;
             VariantInit(&range);
             range.vt = VT_UI4;
-            // Input *is* full-range RGB (ARGB32 desktop pixels). Output is
-            // limited-range YUV, which is what the encoder is actually
-            // emitting regardless of what we asked for previously. Telling
-            // ICodecAPI about both ranges separately lets the encoder pick
-            // the right RGB->YUV conversion matrix internally.
             range.ulVal = eAVEncVideoColorNominalRange_0_255;
-            HRESULT setIn = codec->SetValue(&CODECAPI_AVEncVideoInputColorNominalRange, &range);
+            (void)codec->SetValue(&CODECAPI_AVEncVideoInputColorNominalRange, &range);
             range.ulVal = eAVEncVideoColorNominalRange_16_235;
-            HRESULT setOut = codec->SetValue(&CODECAPI_AVEncVideoOutputColorNominalRange, &range);
+            (void)codec->SetValue(&CODECAPI_AVEncVideoOutputColorNominalRange, &range);
             VariantClear(&range);
-            ss << L"  SetValue(Input)=0x" << setIn
-                << L" SetValue(Output)=0x" << setOut << L"\n";
         }
-        OutputDebugStringW(ss.str().c_str());
     }
 
     if (!mAudioInputMediaType)

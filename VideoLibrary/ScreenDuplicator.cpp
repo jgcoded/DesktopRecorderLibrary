@@ -18,7 +18,6 @@
 */
 
 #include "pch.h"
-#include <sstream>
 #include "Errors.h"
 #include "ScreenDuplicator.h"
 
@@ -63,11 +62,8 @@ ScreenDuplicator::ScreenDuplicator(
         ThrowExceptionCheckRecoverable(mDevice, CreateDuplicationExpectedErrors, hr);
     }
 
-    // Read the output's color space + per-channel bit depth. With HDR
-    // enabled in Windows, DDA hands us framebuffer pixels in scRGB
-    // (linear Rec.709, FP16) or HDR10 (PQ-encoded Rec.2020, 10-bit
-    // UNORM). Treating those values as sRGB downstream produces the
-    // oversaturated-reds look users see in Movies & TV.
+    // Read the output's color space so Pipeline can dispatch to the
+    // right shader conversion for HDR modes (scRGB FP16 or HDR10 PQ).
     {
         winrt::com_ptr<IDXGIOutput6> output6;
         if (SUCCEEDED(mOutput->QueryInterface(__uuidof(IDXGIOutput6), output6.put_void())))
@@ -76,13 +72,6 @@ ScreenDuplicator::ScreenDuplicator(
             if (SUCCEEDED(output6->GetDesc1(&desc1)))
             {
                 mColorSpace = desc1.ColorSpace;
-                std::wstringstream ss;
-                ss << L"ScreenDuplicator: ColorSpace=" << static_cast<int>(mColorSpace)
-                   << L" BitsPerColor=" << desc1.BitsPerColor
-                   << L" MinLuma=" << desc1.MinLuminance
-                   << L" MaxLuma=" << desc1.MaxLuminance
-                   << L" MaxFullFrameLuma=" << desc1.MaxFullFrameLuminance << L"\n";
-                OutputDebugStringW(ss.str().c_str());
             }
         }
     }

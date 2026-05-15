@@ -18,7 +18,6 @@
 */
 
 #include "pch.h"
-#include <sstream>
 #include "CommunicationsAudioCapture.h"
 
 namespace
@@ -61,23 +60,8 @@ CommunicationsAudioCapture::CommunicationsAudioCapture(
     winrt::check_hresult(mAudioClient->SetClientProperties(&props));
 
     // GetMixFormat reflects what the engine will deliver *after* the
-    // Communications APOs run. If the system honored the category, this
-    // typically drops to mono / 16 kHz; if it stayed at the device's
-    // default (e.g. 48 kHz stereo float) the APO chain probably didn't
-    // engage and the recorded audio will sound like the raw mic.
+    // Communications APOs run (typically mono float at the engine rate).
     winrt::check_hresult(mAudioClient->GetMixFormat(&mWaveFormat));
-
-    // Diagnostic: surface the post-Communications format so the user can
-    // confirm DSP engagement without reaching for an external tool.
-    {
-        std::wstringstream ss;
-        ss << L"CommunicationsAudioCapture mix format: "
-           << mWaveFormat->nSamplesPerSec << L" Hz, "
-           << mWaveFormat->nChannels << L" ch, "
-           << mWaveFormat->wBitsPerSample << L" bits, tag=0x"
-           << std::hex << mWaveFormat->wFormatTag << L"\n";
-        OutputDebugStringW(ss.str().c_str());
-    }
 
     mAudioReadyEvent = CreateEventEx(nullptr, nullptr, 0, EVENT_MODIFY_STATE | SYNCHRONIZE);
     winrt::check_pointer(mAudioReadyEvent);
