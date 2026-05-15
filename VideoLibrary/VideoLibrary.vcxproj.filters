@@ -23,9 +23,6 @@
     <ClInclude Include="DesktopMonitor.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="RecordingStep.h">
-      <Filter>Recording Steps</Filter>
-    </ClInclude>
     <ClInclude Include="DesktopPointer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -108,9 +105,6 @@
     </ClCompile>
     <ClCompile Include="DesktopMonitor.cpp">
       <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="RecordingStep.cpp">
-      <Filter>Recording Steps</Filter>
     </ClCompile>
     <ClCompile Include="DesktopPointer.cpp">
       <Filter>Source Files</Filter>

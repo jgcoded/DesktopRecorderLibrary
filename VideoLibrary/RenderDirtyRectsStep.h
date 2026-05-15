@@ -18,13 +18,12 @@
 */
 
 #pragma once
-#include "RecordingStep.h"
 #include "DesktopMonitor.h"
 #include "ShaderCache.h"
 #include "Frame.h"
 #include "Vertex.h"
 
-class RenderDirtyRectsStep : public RecordingStep
+class RenderDirtyRectsStep
 {
 public:
     RenderDirtyRectsStep(
@@ -40,8 +39,7 @@ public:
         );
     ~RenderDirtyRectsStep();
 
-    // Inherited via RecordingStep
-    virtual void Perform() override;
+    void Perform();
 
 private:
 

@@ -19,7 +19,6 @@
 
 #include "pch.h"
 #include "DesktopMonitor.h"
-#include "RecordingStep.h"
 #include "CaptureFrameStep.h"
 #include "VirtualDesktop.h"
 #include "TexturePool.h"

@@ -18,7 +18,6 @@
 */
 
 #pragma once
-#include "RecordingStep.h"
 #include "TexturePool.h"
 #include "DesktopMonitor.h"
 #include "DesktopPointer.h"
@@ -27,7 +26,7 @@
 #include "ShaderCache.h"
 #include "SharedSurface.h"
 
-class Pipeline : public RecordingStep
+class Pipeline
 {
 public:
     Pipeline(
@@ -36,10 +35,9 @@ public:
         RECT virtualDesktopBounds
     );
 
-    virtual ~Pipeline();
+    ~Pipeline();
 
-    // Inherited via RecordingStep
-    virtual void Perform() override;
+    void Perform();
 
     winrt::com_ptr<IMFSample> Sample() const;
 

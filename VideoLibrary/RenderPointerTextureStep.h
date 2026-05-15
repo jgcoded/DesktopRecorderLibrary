@@ -19,12 +19,11 @@
 
 #pragma once
 
-#include "RecordingStep.h"
 #include "ShaderCache.h"
 #include "TexturePool.h"
 #include "SharedSurface.h"
 
-class RenderPointerTextureStep : public RecordingStep
+class RenderPointerTextureStep
 {
 public:
     RenderPointerTextureStep(
@@ -36,9 +35,9 @@ public:
         RECT virtualDesktopBounds,
         RECT desktopMonitorBounds);
 
-    virtual ~RenderPointerTextureStep();
+    ~RenderPointerTextureStep();
 
-    virtual void Perform() override;
+    void Perform();
 
     winrt::com_ptr<ID3D11Texture2D> Result();
 

@@ -19,19 +19,17 @@
 
 #pragma once
 
-#include "RecordingStep.h"
 #include "DesktopMonitor.h"
 #include "ScreenDuplicator.h"
 #include "Frame.h"
 
-class CaptureFrameStep :
-    public RecordingStep
+class CaptureFrameStep
 {
 public:
     CaptureFrameStep(ScreenDuplicator& duplicator);
-    virtual ~CaptureFrameStep();
+    ~CaptureFrameStep();
 
-    virtual void Perform() override;
+    void Perform();
 
     std::shared_ptr<Frame> Result();
 
