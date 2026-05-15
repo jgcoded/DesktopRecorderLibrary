@@ -52,7 +52,7 @@ Pipeline::~Pipeline()
 
 void Pipeline::Perform()
 {
-    mSample == nullptr;
+    mSample = nullptr;
     auto device = mDuplicator->Device();
     // need to use multithread protect because of Media Foundation api
     // https://docs.microsoft.com/en-us/windows/win32/api/mfobjects/nf-mfobjects-imfdxgidevicemanager-resetdevice#remarks

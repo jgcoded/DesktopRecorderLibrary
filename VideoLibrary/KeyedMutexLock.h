@@ -90,10 +90,16 @@ public:
 
     ~KeyedMutexLock()
     {
-        // only release and rotate if mLocked is true?
+        // If AcquireSync timed out we never owned the mutex; releasing here would
+        // both fail the HRESULT check and desync the rotating keys, deadlocking
+        // every subsequent Acquire/Release pair.
+        if (!mLocked)
+        {
+            return;
+        }
         auto releaseKey = mRotatingKeys->ReleaseKey();
         mRotatingKeys->Rotate();
-        winrt::check_hresult(mMutex->ReleaseSync(releaseKey));
+        (void)mMutex->ReleaseSync(releaseKey);
     }
 
     bool Locked() const { return mLocked; }
