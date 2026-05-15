@@ -18,6 +18,7 @@
 */
 
 #include "pch.h"
+#include <sstream>
 #include "DxResource.h"
 #include "ScreenMediaSinkWriter.h"
 
@@ -103,24 +104,34 @@ ScreenMediaSinkWriter::ScreenMediaSinkWriter(const EncodingContext& encodingCont
 
     // The H.264 encoder MFT doesn't reliably honor MF_MT_VIDEO_NOMINAL_RANGE
     // on the media type — it ignores the attribute on some builds and emits
-    // a limited-range stream tag regardless. Force it through ICodecAPI,
-    // which writes the range bit directly into the bitstream's VUI. Both
-    // input and output need to be set or the encoder's internal color
-    // converter still scales 0..255 down into 16..235.
+    // a limited-range stream tag regardless. Try ICodecAPI as a fallback;
+    // log every HRESULT so we can tell whether the encoder accepted it or
+    // rejected it (ffprobe inspection of past output suggested rejection).
     {
         winrt::com_ptr<ICodecAPI> codec;
         HRESULT codecHr = mSinkWriter->GetServiceForStream(
             mVideoStreamIndex, GUID_NULL, IID_PPV_ARGS(codec.put()));
+        std::wstringstream ss;
+        ss << L"ScreenMediaSinkWriter ICodecAPI: GetServiceForStream hr=0x"
+            << std::hex << codecHr << L" codec=" << (codec ? L"yes" : L"no") << L"\n";
         if (SUCCEEDED(codecHr) && codec)
         {
+            HRESULT inSupported = codec->IsSupported(&CODECAPI_AVEncVideoInputColorNominalRange);
+            HRESULT outSupported = codec->IsSupported(&CODECAPI_AVEncVideoOutputColorNominalRange);
+            ss << L"  IsSupported(Input)=0x" << inSupported
+                << L" IsSupported(Output)=0x" << outSupported << L"\n";
+
             VARIANT range;
             VariantInit(&range);
             range.vt = VT_UI4;
             range.ulVal = eAVEncVideoColorNominalRange_0_255;
-            (void)codec->SetValue(&CODECAPI_AVEncVideoInputColorNominalRange, &range);
-            (void)codec->SetValue(&CODECAPI_AVEncVideoOutputColorNominalRange, &range);
+            HRESULT setIn = codec->SetValue(&CODECAPI_AVEncVideoInputColorNominalRange, &range);
+            HRESULT setOut = codec->SetValue(&CODECAPI_AVEncVideoOutputColorNominalRange, &range);
             VariantClear(&range);
+            ss << L"  SetValue(Input)=0x" << setIn
+                << L" SetValue(Output)=0x" << setOut << L"\n";
         }
+        OutputDebugStringW(ss.str().c_str());
     }
 
     if (!mAudioInputMediaType)
