@@ -18,6 +18,7 @@
 */
 
 #include "pch.h"
+#include <sstream>
 #include "Errors.h"
 #include "Frame.h"
 
@@ -46,6 +47,25 @@ Frame::Frame(ScreenDuplicator& duplicator)
 
         mCaptured = true;
         mFrameTexture = desktopImageResource.as<ID3D11Texture2D>();
+
+        // Diagnostic: surface the DXGI format DDA is actually delivering.
+        // Combined with the ColorSpace= line from ScreenDuplicator this
+        // tells us whether the framebuffer is BGRA8 (sRGB / tone-mapped),
+        // R10G10B10A2 (HDR10 PQ), or R16G16B16A16 FLOAT (scRGB linear).
+        // We can only pick the right conversion once we know both.
+        {
+            static DXGI_FORMAT lastFormat = DXGI_FORMAT_UNKNOWN;
+            D3D11_TEXTURE2D_DESC td{};
+            mFrameTexture->GetDesc(&td);
+            if (td.Format != lastFormat)
+            {
+                lastFormat = td.Format;
+                std::wstringstream ss;
+                ss << L"Frame: DDA texture format=" << static_cast<int>(td.Format)
+                   << L" (" << td.Width << L"x" << td.Height << L")\n";
+                OutputDebugStringW(ss.str().c_str());
+            }
+        }
 
         // Don't care about move or dirty rects, just get the pointer data and update the pointer cache
         if (mFrameInfo.LastMouseUpdateTime.QuadPart != 0 && mFrameInfo.PointerShapeBufferSize != 0) {

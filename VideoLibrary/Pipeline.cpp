@@ -110,24 +110,15 @@ void Pipeline::Perform()
 
             renderMoves.Perform();
 
-            // Translate the duplicator's reported DXGI color space into
-            // the shader's conversion mode. SDR sRGB needs no work; the
-            // two common HDR Windows modes each take a different path.
-            ColorSpaceCBData csParams{};
-            csParams.sdrWhiteNits = 100.0f;
-            switch (mDuplicator->ColorSpace())
-            {
-            case DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709:
-                csParams.conversionMode = ColorSpaceCBData::ScRgbLinearToSrgb;
-                break;
-            case DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020:
-            case DXGI_COLOR_SPACE_RGB_STUDIO_G2084_NONE_P2020:
-                csParams.conversionMode = ColorSpaceCBData::Hdr10PqToSrgb;
-                break;
-            default:
-                csParams.conversionMode = ColorSpaceCBData::None;
-                break;
-            }
+            // Conversion temporarily disabled while we collect actual
+            // ColorSpace + texture-format values from the user's HDR
+            // setup. The previous mapping (HDR10 -> mode 2 PQ decode)
+            // made the picture worse than the SDR-tagged baseline on the
+            // user's machine, which means the shader's assumption about
+            // PQ-encoded input doesn't hold for their DDA delivery
+            // format. Once we know what DDA actually hands us we'll
+            // reinstate the correct branch.
+            ColorSpaceCBData csParams{ ColorSpaceCBData::None, 100.0f, 0.0f, 0.0f };
 
             RenderDirtyRectsStep renderDirty{
                 frame,
