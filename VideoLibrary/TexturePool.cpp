@@ -96,7 +96,11 @@ winrt::com_ptr<ID3D11Texture2D> TexturePool::CreateTexture()
     moveDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
     moveDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED;
     winrt::com_ptr<ID3D11Texture2D> texture;
-    mDevice->CreateTexture2D(&moveDesc, nullptr, texture.put());
+    // Check the HRESULT — otherwise a failed allocation hands back a
+    // null com_ptr and downstream check_pointer calls only catch it
+    // some of the time (RenderPointerTextureStep uses virtualDesktopCopy
+    // immediately without a null check).
+    winrt::check_hresult(mDevice->CreateTexture2D(&moveDesc, nullptr, texture.put()));
     return texture;
 }
 

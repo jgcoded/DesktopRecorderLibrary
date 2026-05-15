@@ -23,31 +23,36 @@
 HRESULT TranslateHresultFailureWithDevice(winrt::com_ptr<ID3D11Device> device, HRESULT hr)
 {
     HRESULT translatedHr = hr;
-    HRESULT deviceRemovedReason = device->GetDeviceRemovedReason();
 
-    if (device)
+    // Check the device pointer BEFORE dereferencing it — every caller
+    // passes a real device today, but the safety net needs to actually
+    // be in front of the dereference to mean anything.
+    if (!device)
     {
-        switch (deviceRemovedReason)
-        {
-        case DXGI_ERROR_DEVICE_REMOVED:
-        case DXGI_ERROR_DEVICE_RESET:
-            case static_cast<HRESULT>(E_OUTOFMEMORY) :
-            {
-                // Our device has been stopped due to an external event on the GPU so map them all to
-                // device removed and continue processing the condition
-                translatedHr = DXGI_ERROR_DEVICE_REMOVED;
-                break;
-            }
+        return translatedHr;
+    }
 
-            case S_OK:
-                // Device is not removed
-                break;
+    HRESULT deviceRemovedReason = device->GetDeviceRemovedReason();
+    switch (deviceRemovedReason)
+    {
+    case DXGI_ERROR_DEVICE_REMOVED:
+    case DXGI_ERROR_DEVICE_RESET:
+    case static_cast<HRESULT>(E_OUTOFMEMORY):
+    {
+        // Our device has been stopped due to an external event on the GPU so map them all to
+        // device removed and continue processing the condition
+        translatedHr = DXGI_ERROR_DEVICE_REMOVED;
+        break;
+    }
 
-            default:
-                // Device is removed, but we don't want to lose this removal reason
-                translatedHr = deviceRemovedReason;
-                break;
-        }
+    case S_OK:
+        // Device is not removed
+        break;
+
+    default:
+        // Device is removed, but we don't want to lose this removal reason
+        translatedHr = deviceRemovedReason;
+        break;
     }
 
     return translatedHr;
