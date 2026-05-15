@@ -18,22 +18,36 @@
 */
 
 #pragma once
-#include "TexturePool.h"
+
 #include "DesktopMonitor.h"
 #include "DesktopPointer.h"
+#include "MonitorContributor.h"
 #include "ScreenDuplicator.h"
-#include "Vertex.h"
 #include "ShaderCache.h"
 #include "SharedSurface.h"
+#include "TexturePool.h"
+#include "Vertex.h"
 
+// Top-level multi-monitor recording pipeline.
+//
+// Takes one ScreenDuplicator per monitor we're recording. Each
+// duplicator may live on a different GPU adapter — the master shared
+// surface gets opened on each contributor's device via the keyed-mutex
+// shared handle so all contributors render into the same texture
+// memory.
+//
+// Per frame: each MonitorContributor runs (acquire lock, capture,
+// render into its region of the virtual desktop, release lock). When
+// all contributors are done, the pointer composite step and the
+// MF-sample wrap step run on the master device.
 class Pipeline
 {
 public:
     Pipeline(
-        std::shared_ptr<ScreenDuplicator> duplicator,
+        std::vector<std::shared_ptr<ScreenDuplicator>> duplicators,
+        std::shared_ptr<DesktopPointer> desktopPointer,
         std::shared_ptr<SharedSurface> sharedSurface,
-        RECT virtualDesktopBounds
-    );
+        RECT virtualDesktopBounds);
 
     ~Pipeline();
 
@@ -42,25 +56,25 @@ public:
     winrt::com_ptr<IMFSample> Sample() const;
 
 private:
+    std::vector<std::shared_ptr<ScreenDuplicator>> mDuplicators;
+    std::vector<MonitorContributor> mContributors;
 
-    void AllocateTexturePool();
-    void AllocateStagingTexture(winrt::com_ptr<ID3D11Device> device, const D3D11_TEXTURE2D_DESC& desc);
-
-    std::shared_ptr<ScreenDuplicator> mDuplicator;
+    // Master-device state. The master device is whichever device the
+    // sharedSurface lives on — it's where the pointer step composites,
+    // where the TexturePool allocates, and where the output IMFSample
+    // is wrapped. Contributors that live on other devices feed into
+    // the same shared surface via OpenSharedSurfaceWithDevice.
     std::shared_ptr<SharedSurface> mSharedSurface;
+    std::shared_ptr<DesktopPointer> mDesktopPointer;
     std::shared_ptr<ShaderCache> mShaderCache;
-    std::shared_ptr<std::vector<Vertex>> mVertexBuffer;
-    winrt::com_ptr<ID3D11Buffer> mGpuVertexBuffer;
-    UINT mGpuVertexBufferCapacity;
     winrt::com_ptr<TexturePool> mTexturePool;
-    winrt::com_ptr<ID3D11Texture2D> mStagingTexture;
     winrt::com_ptr<IMFSample> mSample;
-    winrt::com_ptr<ID3D11RenderTargetView> mRenderTargetView;
+
     RECT mVirtualDesktopBounds;
-    RECT mDesktopMonitorBounds;
+
     // GPU present-time tracking. QPF is queried once; the baseline is
-    // captured from the first frame DDA delivers with a real present time
-    // so the emitted sample timeline starts at 0.
+    // captured from the first frame any contributor delivers with a
+    // real present time so the emitted sample timeline starts at 0.
     LARGE_INTEGER mQpcFrequency;
     int64_t mPresentationTimeBaselineQpc;
     bool mPresentationTimeBaselineSet;

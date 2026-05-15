@@ -187,16 +187,30 @@ void PipelineThread(
 
     std::vector<DesktopMonitor> desktopMonitors = virtualDesktop->DesktopMonitors();
     std::shared_ptr<DesktopPointer> desktopPointer = std::make_shared<DesktopPointer>(virtualDesktop->VirtualDesktopBounds());
-    std::shared_ptr<ScreenDuplicator> duplicator = std::make_shared<ScreenDuplicator>(
-        desktopMonitors[monitorIndex],
-        desktopPointer
-    );
-    
+
+    // One duplicator per monitor. Each duplicator inherits its device
+    // from its monitor's display adapter, so this is naturally multi-
+    // GPU: monitors on different adapters end up with different
+    // ID3D11Devices, and Pipeline opens the shared surface on each
+    // device via the keyed-mutex shared handle.
+    std::vector<std::shared_ptr<ScreenDuplicator>> duplicators;
+    duplicators.reserve(desktopMonitors.size());
+    for (auto const& monitor : desktopMonitors)
+    {
+        duplicators.push_back(std::make_shared<ScreenDuplicator>(monitor, desktopPointer));
+    }
+    (void)monitorIndex;  // retained in the settings JSON for back-compat; ignored in multi-monitor mode
+
     RECT bounds = virtualDesktop->VirtualDesktopBounds();
     LONG width = bounds.right - bounds.left;
     LONG height = bounds.bottom - bounds.top;
+
+    // The shared surface lives on the master device. Pick the first
+    // duplicator's device as master; the sink writer encodes from the
+    // same device.
+    auto masterDevice = duplicators.front()->Device();
     std::shared_ptr<SharedSurface> sharedSurface = std::make_shared<SharedSurface>(
-        duplicator->Device(),
+        masterDevice,
         width,
         height
     );
@@ -210,7 +224,7 @@ void PipelineThread(
         encodingContext.bitRate = bitRate;
         encodingContext.videoInputMediaType = videoMediaType;
         encodingContext.audioInputMediaType = audioMediaType;
-        encodingContext.device = duplicator->Device();
+        encodingContext.device = masterDevice;
 
         writer = std::make_unique<ScreenMediaSinkWriter>(encodingContext);
     }
@@ -226,7 +240,8 @@ void PipelineThread(
     (void)SetThreadExecutionState(ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED | ES_AWAYMODE_REQUIRED | ES_CONTINUOUS);
 
     std::unique_ptr<Pipeline> duplicationPipeline = std::make_unique<Pipeline>(
-        duplicator,
+        duplicators,
+        desktopPointer,
         sharedSurface,
         virtualDesktop->VirtualDesktopBounds()
     );
@@ -263,15 +278,29 @@ void PipelineThread(
         }
 
         writer->End();
-
         writer.reset(nullptr);
 
+        // Release the pipeline (drops its MonitorContributors which
+        // hold opened views of the shared surface on each device),
+        // then the duplicators, then the shared surface.
+        duplicationPipeline.reset();
+
+        std::vector<winrt::com_ptr<ID3D11Device>> devices;
+        devices.reserve(duplicators.size());
+        for (auto const& dup : duplicators)
+        {
+            devices.push_back(dup->Device());
+        }
+        duplicators.clear();
+        sharedSurface.reset();
         desktopMonitors.clear();
 
+        // Flush every device we used. With multi-GPU there can be more
+        // than one — each needs to drop pending GPU work before we
+        // MFShutdown, otherwise the debug layer reports dangling MF
+        // references on objects still queued.
+        for (auto const& device : devices)
         {
-            auto device = duplicator->Device();
-            duplicator.reset();
-
             winrt::com_ptr<ID3D11DeviceContext> context;
             device->GetImmediateContext(context.put());
             context->ClearState();
@@ -339,7 +368,7 @@ struct RecordingContext
     }
 };
 
-std::unique_ptr<RecordingContext> StartRecording(hstring filename, size_t monitorIndex, RECT monitorBounds, WindowFactory<BorderWindow>& windowFactory)
+std::unique_ptr<RecordingContext> StartRecording(hstring filename, RECT borderBounds, WindowFactory<BorderWindow>& windowFactory)
 {
     std::unique_ptr<RecordingContext> recordingThread{ new RecordingContext{} };
     recordingThread->stopThread.reset(new atomic_bool{ false });
@@ -347,14 +376,16 @@ std::unique_ptr<RecordingContext> StartRecording(hstring filename, size_t monito
     recordingThread->stopRecordingByUser.reset(new atomic_bool{ false });
     recordingThread->borderWindow = std::move(windowFactory.NewWindow());
 
+    // Border covers the whole virtual desktop now that we record every
+    // monitor at once.
     recordingThread->borderWindow->SizeAndPosition(
-        monitorBounds.left,
-        monitorBounds.top,
-        monitorBounds.right - monitorBounds.left + 1,
-        monitorBounds.bottom - monitorBounds.top + 1
+        borderBounds.left,
+        borderBounds.top,
+        borderBounds.right - borderBounds.left + 1,
+        borderBounds.bottom - borderBounds.top + 1
     );
 
-    JsonObject data = MakeRecordCommand(filename, monitorIndex);
+    JsonObject data = MakeRecordCommand(filename, 0);
 
     recordingThread->pipelineThread = std::thread {
         PipelineThread,
@@ -373,7 +404,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     UNREFERENCED_PARAMETER(nCmdShow);
 
     std::wstring fileNameBase = L"test-recording";
-    size_t monitorIndex = 0;
 
     check_hresult(MFStartup(MF_VERSION));
     init_apartment();
@@ -435,9 +465,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
             std::wstringstream ss;
             ss << fileNameBase << "-" << fileNumber++ << ".mp4";
             hstring filename{ ss.str() };
-            std::vector<DesktopMonitor> desktopMonitors = virtualDesktop->GetAllDesktopMonitors();
-            RECT monitorBounds = desktopMonitors[monitorIndex].DesktopMonitorBounds();
-            recordingThread = std::move(StartRecording(filename, monitorIndex, monitorBounds, borderWindowFactory));
+            // Border + recording target are now the entire virtual
+            // desktop; Pipeline captures from every monitor.
+            recordingThread = std::move(StartRecording(filename, virtualDesktop->VirtualDesktopBounds(), borderWindowFactory));
         }
         else if (msg.message == stopRecordingMessage)
         {

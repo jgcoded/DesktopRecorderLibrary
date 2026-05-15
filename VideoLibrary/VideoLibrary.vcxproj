@@ -175,6 +175,7 @@
     <ClInclude Include="TextureToMediaSampleStep.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="DesktopPointer.h" />
+    <ClInclude Include="MonitorContributor.h" />
     <ClInclude Include="CaptureFrameStep.h" />
     <ClInclude Include="VirtualDesktop.h" />
   </ItemGroup>
@@ -201,6 +202,7 @@
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="DesktopPointer.cpp" />
+    <ClCompile Include="MonitorContributor.cpp" />
     <ClCompile Include="CaptureFrameStep.cpp" />
     <ClCompile Include="VirtualDesktop.cpp" />
   </ItemGroup>

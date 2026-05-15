@@ -19,146 +19,102 @@
 
 #include "pch.h"
 #include "DxMultithread.h"
-#include "CaptureFrameStep.h"
-#include "RenderMoveRectsStep.h"
-#include "RenderDirtyRectsStep.h"
+#include "Pipeline.h"
 #include "RenderPointerTextureStep.h"
 #include "TextureToMediaSampleStep.h"
-#include "Pipeline.h"
 
 Pipeline::Pipeline(
-    std::shared_ptr<ScreenDuplicator> duplicator,
+    std::vector<std::shared_ptr<ScreenDuplicator>> duplicators,
+    std::shared_ptr<DesktopPointer> desktopPointer,
     std::shared_ptr<SharedSurface> sharedSurface,
-    RECT virtualDesktopBounds
-)
-    : mDuplicator{ duplicator }
+    RECT virtualDesktopBounds)
+    : mDuplicators{ std::move(duplicators) }
     , mSharedSurface{ sharedSurface }
-    , mGpuVertexBufferCapacity{ 0 }
+    , mDesktopPointer{ desktopPointer }
     , mVirtualDesktopBounds{ virtualDesktopBounds }
     , mPresentationTimeBaselineQpc{ 0 }
     , mPresentationTimeBaselineSet{ false }
 {
     QueryPerformanceFrequency(&mQpcFrequency);
-    if (mDuplicator == nullptr)
+
+    if (mDuplicators.empty())
     {
-        throw std::exception("Null duplicator");
+        throw std::exception("Pipeline requires at least one duplicator");
+    }
+    for (auto const& dup : mDuplicators)
+    {
+        winrt::check_pointer(dup.get());
+    }
+    winrt::check_pointer(mSharedSurface.get());
+    winrt::check_pointer(mDesktopPointer.get());
+
+    // Master device drives the pointer step + sample step. The shared
+    // surface anchors the master device by definition.
+    auto masterDevice = mSharedSurface->Device();
+    mShaderCache = std::make_shared<ShaderCache>(masterDevice);
+
+    // TexturePool is per-device; pointer composite reads from the
+    // shared surface and writes into a pool texture on the master.
+    {
+        D3D11_TEXTURE2D_DESC desc = mSharedSurface->Desc();
+        mTexturePool.attach(new TexturePool(masterDevice, desc));
+        winrt::check_pointer(mTexturePool.get());
     }
 
-    winrt::check_pointer(mSharedSurface.get());
-    mShaderCache = std::make_shared<ShaderCache>(mDuplicator->Device());
-    mVertexBuffer = std::make_shared<std::vector<Vertex>>();
-
-    // Resources that don't depend on the first captured frame are
-    // allocated up front so Perform() stays focused on per-frame work
-    // and doesn't carry lazy-init branches. The staging texture's
-    // format/size come from the duplicator's desktop image (which we
-    // don't see until first frame), so it stays lazy below.
-    AllocateTexturePool();
-    winrt::check_hresult(mDuplicator->Device()->CreateRenderTargetView(
-        mSharedSurface->Texture(),
-        nullptr,
-        mRenderTargetView.put()));
+    // Build a contributor per duplicator. Each one opens the shared
+    // surface on its device (or reuses the master instance for same-
+    // device monitors) and stands up its own ShaderCache + RTV.
+    mContributors.reserve(mDuplicators.size());
+    for (auto const& dup : mDuplicators)
+    {
+        mContributors.emplace_back(dup, mSharedSurface, mVirtualDesktopBounds);
+    }
 }
 
-Pipeline::~Pipeline()
-{
-}
+Pipeline::~Pipeline() = default;
 
 void Pipeline::Perform()
 {
     mSample = nullptr;
-    auto device = mDuplicator->Device();
-    // need to use multithread protect because of Media Foundation api
-    // https://docs.microsoft.com/en-us/windows/win32/api/mfobjects/nf-mfobjects-imfdxgidevicemanager-resetdevice#remarks
-    DxMultithread multithread{ device.as<ID3D10Multithread>() };
+
+    // Run each contributor in turn. Each acquires the keyed-mutex lock
+    // on the shared surface, captures + renders its monitor, releases.
+    // Serializing the contributors keeps the rotating-key sequence on
+    // the keyed mutex consistent across N devices without needing extra
+    // synchronization; if a contributor's frame fails to acquire (no
+    // new content), its KeyedMutexLock short-circuits the rotate so
+    // subsequent contributors stay in step.
+    //
+    // Pick the first non-null frame's present time as the master clock
+    // for this iteration. Different monitors may report slightly
+    // different QPC values for "the same" frame; for the encoded
+    // timeline we just need one consistent source.
     int64_t framePresentationTimeQpc = 0;
+    for (auto& contributor : mContributors)
     {
-        auto lock = mSharedSurface->Lock();
-
-        if (!lock->Locked())
+        auto frame = contributor.Contribute();
+        if (frame && frame->Captured() && framePresentationTimeQpc == 0)
         {
-            return;
-        }
-
-        CaptureFrameStep captureFrame{ *mDuplicator };
-        captureFrame.Perform();
-
-        std::shared_ptr<Frame> frame = captureFrame.Result();
-        mDesktopMonitorBounds = frame->DesktopMonitorBounds();
-        framePresentationTimeQpc = frame->PresentationTime();
-        if (frame->Captured())
-        {
-            // Staging texture's desc comes from the first captured frame's
-            // desktop image — that's the one resource we can't allocate
-            // at ctor time without a frame in hand.
-            if (mStagingTexture == nullptr)
-            {
-                D3D11_TEXTURE2D_DESC stagingDesc;
-                frame->DesktopImage()->GetDesc(&stagingDesc);
-                stagingDesc.BindFlags = D3D11_BIND_RENDER_TARGET;
-                stagingDesc.MiscFlags = 0;
-                AllocateStagingTexture(device, stagingDesc);
-            }
-
-            RenderMoveRectsStep renderMoves{
-                frame,
-                mVirtualDesktopBounds,
-                mStagingTexture,
-                lock->TexturePtr()
-            };
-
-            renderMoves.Perform();
-
-            // Pick the conversion based on the per-frame texture format.
-            // With DuplicateOutput1 in the duplicator we now get the
-            // native framebuffer format: FP16 (scRGB) under HDR, BGRA8
-            // (sRGB) under SDR. Default sdrWhiteNits to 240 — a common
-            // "SDR content brightness" value on HDR-capable laptops;
-            // ideally we'd query DISPLAYCONFIG_SDR_WHITE_LEVEL but a
-            // sensible constant is close enough as a first cut.
-            ColorSpaceCBData csParams{ ColorSpaceCBData::None, 240.0f, 0.0f, 0.0f };
-            switch (frame->Format())
-            {
-            case DXGI_FORMAT_R16G16B16A16_FLOAT:
-                csParams.conversionMode = ColorSpaceCBData::ScRgbLinearToSrgb;
-                break;
-            case DXGI_FORMAT_R10G10B10A2_UNORM:
-                if (mDuplicator->ColorSpace() == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020
-                    || mDuplicator->ColorSpace() == DXGI_COLOR_SPACE_RGB_STUDIO_G2084_NONE_P2020)
-                {
-                    csParams.conversionMode = ColorSpaceCBData::Hdr10PqToSrgb;
-                }
-                break;
-            default:
-                // BGRA8 (and anything else) passes through. For BGRA8 in
-                // HDR-on mode DDA has already mapped to a sRGB-ish 8-bit
-                // surface; passthrough produces correct colors.
-                break;
-            }
-
-            RenderDirtyRectsStep renderDirty{
-                frame,
-                mVirtualDesktopBounds,
-                mVertexBuffer,
-                mGpuVertexBuffer,
-                mGpuVertexBufferCapacity,
-                mShaderCache,
-                lock->TexturePtr(),
-                mRenderTargetView,
-                csParams
-            };
-            renderDirty.Perform();
+            framePresentationTimeQpc = frame->PresentationTime();
         }
     }
 
+    // Master-device steps: pointer composite + sample wrap. Both run
+    // on the master device's context; the pointer step takes its own
+    // lock on the shared surface internally to copy the composited
+    // virtual desktop into a pool texture before drawing the cursor.
+    auto masterDevice = mSharedSurface->Device();
+    DxMultithread multithread{ masterDevice.as<ID3D10Multithread>() };
+
+    RECT lastMonitorBounds{};  // unused in current pointer step but the API takes it
     RenderPointerTextureStep renderPointer{
-        mDuplicator->DesktopPointerPtr(),
+        mDesktopPointer,
         mSharedSurface,
-        mDuplicator->Device(),
+        masterDevice,
         mShaderCache,
         mTexturePool,
         mVirtualDesktopBounds,
-        mDesktopMonitorBounds
+        lastMonitorBounds
     };
     renderPointer.Perform();
 
@@ -167,20 +123,17 @@ void Pipeline::Perform()
         return;
     }
 
-    winrt::com_ptr<ID3D11Texture2D> desktopTexture = renderPointer.Result();
-    
     TextureToMediaSampleStep convertTexture{
-        desktopTexture,
+        renderPointer.Result(),
         mTexturePool
     };
     convertTexture.Perform();
 
     mSample = convertTexture.Result();
 
-    // Tag the sample with the GPU present time of the frame this output
-    // is derived from. The sink writer treats sample time as authoritative
-    // when set, so dropped frames don't compress the encoded timeline
-    // (which they would with a wall-clock-at-write strategy).
+    // Tag the sample with the GPU present time of the captured frame
+    // so the sink writer's encoded timeline is frame-accurate (and so
+    // dropped frames don't compress the timeline).
     if (mSample && framePresentationTimeQpc > 0 && mQpcFrequency.QuadPart > 0)
     {
         if (!mPresentationTimeBaselineSet)
@@ -190,8 +143,7 @@ void Pipeline::Perform()
         }
         int64_t elapsedQpc = framePresentationTimeQpc - mPresentationTimeBaselineQpc;
         int64_t qpf = mQpcFrequency.QuadPart;
-        // Split-multiply to avoid overflowing int64 on long recordings
-        // when qpf is not a power-of-10 divisor of 10_000_000.
+        // Split-multiply to avoid overflowing int64 on long recordings.
         int64_t sampleTime100ns = (elapsedQpc / qpf) * 10'000'000
             + (elapsedQpc % qpf) * 10'000'000 / qpf;
         winrt::check_hresult(mSample->SetSampleTime(sampleTime100ns));
@@ -201,21 +153,4 @@ void Pipeline::Perform()
 winrt::com_ptr<IMFSample> Pipeline::Sample() const
 {
     return mSample;
-}
-
-void Pipeline::AllocateTexturePool()
-{
-    D3D11_TEXTURE2D_DESC desc = mSharedSurface->Desc();
-    // Use the same device that was used to open the shared surface
-    // instead of the device used by Desktop Duplication API's desktop image.
-    mTexturePool.attach(new TexturePool(mDuplicator->Device(), desc));
-    winrt::check_pointer(mTexturePool.get());
-}
-
-void Pipeline::AllocateStagingTexture(winrt::com_ptr<ID3D11Device> device, const D3D11_TEXTURE2D_DESC& desc)
-{
-    winrt::check_hresult(device->CreateTexture2D(
-        &desc,
-        nullptr,
-        mStagingTexture.put()));
 }
