@@ -48,6 +48,16 @@ Pipeline::Pipeline(
     mShaderCache = std::make_shared<ShaderCache>(mDuplicator->Device());
     mVertexBuffer = std::make_shared<std::vector<Vertex>>();
 
+    // Resources that don't depend on the first captured frame are
+    // allocated up front so Perform() stays focused on per-frame work
+    // and doesn't carry lazy-init branches. The staging texture's
+    // format/size come from the duplicator's desktop image (which we
+    // don't see until first frame), so it stays lazy below.
+    AllocateTexturePool();
+    winrt::check_hresult(mDuplicator->Device()->CreateRenderTargetView(
+        mSharedSurface->Texture(),
+        nullptr,
+        mRenderTargetView.put()));
 }
 
 Pipeline::~Pipeline()
@@ -78,11 +88,9 @@ void Pipeline::Perform()
         framePresentationTimeQpc = frame->PresentationTime();
         if (frame->Captured())
         {
-            if (mTexturePool == nullptr)
-            {
-                AllocateTexturePool();
-            }
-
+            // Staging texture's desc comes from the first captured frame's
+            // desktop image — that's the one resource we can't allocate
+            // at ctor time without a frame in hand.
             if (mStagingTexture == nullptr)
             {
                 D3D11_TEXTURE2D_DESC stagingDesc;
@@ -90,15 +98,6 @@ void Pipeline::Perform()
                 stagingDesc.BindFlags = D3D11_BIND_RENDER_TARGET;
                 stagingDesc.MiscFlags = 0;
                 AllocateStagingTexture(device, stagingDesc);
-            }
-
-            if (mRenderTargetView == nullptr)
-            {
-                winrt::check_hresult(mDuplicator->Device()->CreateRenderTargetView(
-                    lock->TexturePtr(),
-                    nullptr,
-                    mRenderTargetView.put()
-                ));
             }
 
             RenderMoveRectsStep renderMoves{
