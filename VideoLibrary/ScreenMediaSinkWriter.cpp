@@ -30,6 +30,8 @@ ScreenMediaSinkWriter::ScreenMediaSinkWriter(const EncodingContext& encodingCont
     , mWriteStartTime{ std::chrono::nanoseconds{ MAXLONGLONG } }
     , mDevice{ encodingContext.device }
     , mAudioStreamIndex { 0 }
+    , mAudioBaselineTime{ 0 }
+    , mAudioBaselineSet{ false }
 {
     auto mediaEncodingProfile = MediaEncodingProfile::CreateMp4(encodingContext.resolutionOption);
 
@@ -139,6 +141,7 @@ void ScreenMediaSinkWriter::Begin()
 {
     std::lock_guard<std::mutex> lock{ mMutex };
     mIsWriting = true;
+    mAudioBaselineSet = false;
     try
     {
         winrt::check_hresult(mSinkWriter->BeginWriting());
@@ -200,11 +203,18 @@ void ScreenMediaSinkWriter::WriteSample(IMFSample* sample)
     }
     else if (sampleType == MFMediaType_Audio)
     {
+        // Audio sample times come from the MF source reader in its own
+        // 100ns clock domain (epoch depends on the source). Rebase to the
+        // first sample we receive so audio starts at 0 in the output;
+        // MF aligns the audio and video tracks from there.
         LONGLONG sampleTime;
-        sample->GetSampleTime(&sampleTime);
-        auto startTime = mWriteStartTime.time_since_epoch().count() / 100;
-        sampleTime = sampleTime - startTime;
-        sample->SetSampleTime(sampleTime);
+        winrt::check_hresult(sample->GetSampleTime(&sampleTime));
+        if (!mAudioBaselineSet)
+        {
+            mAudioBaselineTime = sampleTime;
+            mAudioBaselineSet = true;
+        }
+        winrt::check_hresult(sample->SetSampleTime(sampleTime - mAudioBaselineTime));
         mSinkWriter->WriteSample(mAudioStreamIndex, sample);
     }
 }
