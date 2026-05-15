@@ -31,6 +31,14 @@ public:
     std::unique_ptr<KeyedMutexLock> Lock() const;
     std::shared_ptr<SharedSurface> OpenSharedSurfaceWithDevice(winrt::com_ptr<ID3D11Device> device) const;
     D3D11_TEXTURE2D_DESC Desc() const { return mDesc; }
+
+    // The underlying texture, for callers that need it OUTSIDE the
+    // keyed-mutex protected critical section — e.g. CreateRenderTargetView
+    // and CreateShaderResourceView, which don't touch GPU memory and so
+    // don't require the lock. Code that actually reads or writes pixels
+    // must still go through Lock() so cross-device GPU access stays
+    // serialized.
+    ID3D11Texture2D* Texture() const { return mSharedSurface.get(); }
 private:
 
     winrt::com_ptr<ID3D11Texture2D> mSharedSurface;

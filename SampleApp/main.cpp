@@ -34,24 +34,6 @@ using namespace Windows::Data::Json;
 
 using namespace std;
 
-winrt::com_ptr<IMFMediaType> GetMediaTypeFromMediaSource(winrt::com_ptr<IMFMediaSource> source)
-{
-    winrt::com_ptr<IMFPresentationDescriptor> videoDesc;
-    source->CreatePresentationDescriptor(videoDesc.put());
-
-    BOOL isSelected = false;
-    winrt::com_ptr<IMFStreamDescriptor> videoStreamDescriptor;
-    videoDesc->GetStreamDescriptorByIndex(0, &isSelected, videoStreamDescriptor.put());
-
-    winrt::com_ptr<IMFMediaTypeHandler> videoMediaTypeHandler;
-    videoStreamDescriptor->GetMediaTypeHandler(videoMediaTypeHandler.put());
-
-    winrt::com_ptr<IMFMediaType> videoMediaType;
-    videoMediaTypeHandler->GetMediaTypeByIndex(0, videoMediaType.put());
-
-    return videoMediaType;
-}
-
 winrt::com_ptr<IMFMediaType> GetMediaType(RECT virtualDesktopBounds)
 {
     // create media type
@@ -70,6 +52,13 @@ winrt::com_ptr<IMFMediaType> GetMediaType(RECT virtualDesktopBounds)
     winrt::check_bool(width > 0 && height > 0);
 
     winrt::check_hresult(MFSetAttributeSize(mediaType.get(), MF_MT_FRAME_SIZE, width, height));
+
+    // ARGB32 desktop pixels are full-range 0..255. Without this tag the
+    // H.264 encoder assumes 16..235 studio range, which crushes blacks
+    // and washes out highlights; the encoded stream is also tagged as
+    // limited-range so players "expand" 16..235 -> 0..255, compounding
+    // the damage. Tag the pipeline as full-range end to end.
+    winrt::check_hresult(mediaType->SetUINT32(MF_MT_VIDEO_NOMINAL_RANGE, MFNominalRange_0_255));
 
     return mediaType;
 }
@@ -169,31 +158,194 @@ void PipelineThread(
 
     auto virtualDesktop = std::make_shared<VirtualDesktop>();
     com_ptr<IMFMediaType> videoMediaType = GetMediaType(virtualDesktop->VirtualDesktopBounds());
-    com_ptr<IMFMediaSource> audioMediaSource;
     com_ptr<IMFMediaType> audioMediaType;
+
+    std::unique_ptr<ScreenMediaSinkWriter> writer;
+
+    // RNNoise applies only when the capture format matches its
+    // training: 48 kHz mono FP32. CommunicationsAudioCapture is
+    // expected to produce exactly that on Windows engines, but
+    // gate explicitly so e.g. a stereo card silently bypasses
+    // rather than corrupting audio.
+    //
+    // Declared BEFORE audioCapture so destruction order joins the
+    // capture thread (~audioCapture) before the filter goes away.
+    // The explicit `audioCapture->Stop()` in the teardown block
+    // also makes this safe, but ordering belt-and-suspenders.
+    std::unique_ptr<RnnoiseFilter> rnnoise;
+    bool rnnoiseEnabled = false;
+    LONGLONG rnnoiseAccumStartTime100ns = 0;
+    bool rnnoiseAccumStartSet = false;
+
+    // Pre-roll window: Communications-mode capture engages the system
+    // AGC, which starts at low gain and ramps up once it has measured
+    // the incoming signal. Without warm-up, the first ~second of a
+    // recording fades in as AGC converges. We start the capture early,
+    // run samples through RNNoise (so the filter state settles too)
+    // but discard the output until this flag flips — by which point
+    // AGC has stabilized.
+    //
+    // Atomic because the audio capture thread reads it on every
+    // callback while the main thread is the only writer.
+    constexpr auto kAudioWarmUpDuration = std::chrono::milliseconds(1000);
+    std::atomic<bool> audioWarmUpDone{ false };
+
+    std::unique_ptr<CommunicationsAudioCapture> audioCapture;
+
+    auto audioCallback = [&writer, &stop, &rnnoise, &rnnoiseEnabled,
+                          &rnnoiseAccumStartTime100ns, &rnnoiseAccumStartSet,
+                          &audioWarmUpDone](
+        IMFSample* sample, HRESULT hr)
+    {
+        if (sample == nullptr || FAILED(hr))
+        {
+            stop->store(true);
+            return;
+        }
+        sample->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Audio);
+
+        if (!rnnoiseEnabled || !rnnoise)
+        {
+            // Bypass path: nothing to warm up beyond the system AGC,
+            // so just gate the write.
+            if (audioWarmUpDone.load(std::memory_order_acquire))
+            {
+                writer->WriteSample(sample);
+            }
+            return;
+        }
+
+        // Pull the float PCM out of the IMFSample, run it through
+        // RNNoise, and write back a new sample carrying the
+        // suppressed audio. The model emits in 480-sample chunks,
+        // so the output's frame count is floor((accum + in)/480)*480
+        // - prior accumulator; missing tail samples ride in the
+        // accumulator until the next packet completes a frame.
+        winrt::com_ptr<IMFMediaBuffer> inBuffer;
+        winrt::check_hresult(sample->GetBufferByIndex(0, inBuffer.put()));
+
+        BYTE* inData = nullptr;
+        DWORD inBytes = 0;
+        winrt::check_hresult(inBuffer->Lock(&inData, nullptr, &inBytes));
+        const size_t inFrames = inBytes / sizeof(float);
+
+        LONGLONG sampleTime = 0;
+        winrt::check_hresult(sample->GetSampleTime(&sampleTime));
+        // If the accumulator is empty, this packet's leading sample
+        // is the start of the next emitted frame's timeline.
+        if (!rnnoiseAccumStartSet)
+        {
+            rnnoiseAccumStartTime100ns = sampleTime;
+            rnnoiseAccumStartSet = true;
+        }
+
+        // Output must accommodate the worst case where the filter's
+        // internal accumulator already held kFrameSize-1 samples and
+        // this packet completes a full output frame on top of its
+        // entire input — i.e. up to inFrames + (kFrameSize - 1)
+        // samples. Sizing the buffer exactly to inFrames was a
+        // heap overflow whenever the accumulator was non-empty.
+        const size_t outCapacityFrames = RnnoiseFilter::MaxOutputFor(inFrames);
+        winrt::com_ptr<IMFMediaBuffer> outBuffer;
+        winrt::check_hresult(MFCreateMemoryBuffer(static_cast<DWORD>(outCapacityFrames * sizeof(float)), outBuffer.put()));
+
+        BYTE* outData = nullptr;
+        winrt::check_hresult(outBuffer->Lock(&outData, nullptr, nullptr));
+        const size_t outFrames = rnnoise->Process(
+            reinterpret_cast<const float*>(inData),
+            inFrames,
+            reinterpret_cast<float*>(outData),
+            outCapacityFrames);
+        winrt::check_hresult(outBuffer->Unlock());
+        winrt::check_hresult(inBuffer->Unlock());
+
+        if (outFrames == 0)
+        {
+            // Nothing drained yet; just accumulating. Drop this packet
+            // — the audio it carried will reappear in the next emit.
+            return;
+        }
+
+        winrt::check_hresult(outBuffer->SetCurrentLength(static_cast<DWORD>(outFrames * sizeof(float))));
+
+        winrt::com_ptr<IMFSample> outSample;
+        winrt::check_hresult(MFCreateSample(outSample.put()));
+        winrt::check_hresult(outSample->AddBuffer(outBuffer.get()));
+        outSample->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Audio);
+
+        const LONGLONG duration100ns = static_cast<LONGLONG>(outFrames) * 10'000'000 / 48000;
+        winrt::check_hresult(outSample->SetSampleTime(rnnoiseAccumStartTime100ns));
+        winrt::check_hresult(outSample->SetSampleDuration(duration100ns));
+
+        // The emitted samples cover [accumStart, accumStart + duration);
+        // whatever is still buffered starts where this output ended.
+        // Keep advancing the accumulator's logical start time during
+        // warm-up too — that way the first sample we actually deliver
+        // has a timestamp matching real wall-clock, and the writer's
+        // audio baseline rebase puts it at t≈0 in the output.
+        rnnoiseAccumStartTime100ns += duration100ns;
+
+        if (audioWarmUpDone.load(std::memory_order_acquire))
+        {
+            writer->WriteSample(outSample.get());
+        }
+    };
 
     if (!audioEndpoint.empty())
     {
-        audioMediaSource = AudioMedia::GetAudioMediaSourceFromEndpoint(std::wstring{ audioEndpoint });
-        audioMediaType = GetMediaTypeFromMediaSource(audioMediaSource);
+        // CommunicationsAudioCapture opens the mic in
+        // AudioCategory_Communications, which routes through the system's
+        // voice DSP (AEC/NS/AGC). Replaces the prior MFCreateDeviceSource
+        // path that gave the unfiltered "warbly" sound.
+        audioCapture = std::make_unique<CommunicationsAudioCapture>(
+            std::wstring{ audioEndpoint }, audioCallback);
+        audioMediaType = audioCapture->MediaType();
+
+        // RNNoise gate: must be 48 kHz mono FP32 to match the training.
+        // Communications-mode shared-mode capture on Win10/11 reports
+        // plain WAVE_FORMAT_IEEE_FLOAT (0x3) at this configuration —
+        // not WAVE_FORMAT_EXTENSIBLE — so a tag-equality check is the
+        // right gate. Anything else passes through unfiltered.
+        const WAVEFORMATEX* wf = audioCapture->WaveFormat();
+        if (wf->wFormatTag == WAVE_FORMAT_IEEE_FLOAT
+            && wf->nSamplesPerSec == 48000
+            && wf->nChannels == 1
+            && wf->wBitsPerSample == 32)
+        {
+            rnnoise = std::make_unique<RnnoiseFilter>();
+            rnnoiseEnabled = true;
+        }
     }
 
     std::vector<DesktopMonitor> desktopMonitors = virtualDesktop->DesktopMonitors();
     std::shared_ptr<DesktopPointer> desktopPointer = std::make_shared<DesktopPointer>(virtualDesktop->VirtualDesktopBounds());
-    std::shared_ptr<ScreenDuplicator> duplicator = std::make_shared<ScreenDuplicator>(
-        desktopMonitors[monitorIndex],
-        desktopPointer
-    );
-    
+
+    // One duplicator per monitor. Each duplicator inherits its device
+    // from its monitor's display adapter, so this is naturally multi-
+    // GPU: monitors on different adapters end up with different
+    // ID3D11Devices, and Pipeline opens the shared surface on each
+    // device via the keyed-mutex shared handle.
+    std::vector<std::shared_ptr<ScreenDuplicator>> duplicators;
+    duplicators.reserve(desktopMonitors.size());
+    for (auto const& monitor : desktopMonitors)
+    {
+        duplicators.push_back(std::make_shared<ScreenDuplicator>(monitor, desktopPointer));
+    }
+    (void)monitorIndex;  // retained in the settings JSON for back-compat; ignored in multi-monitor mode
+
     RECT bounds = virtualDesktop->VirtualDesktopBounds();
     LONG width = bounds.right - bounds.left;
     LONG height = bounds.bottom - bounds.top;
+
+    // The shared surface lives on the master device. Pick the first
+    // duplicator's device as master; the sink writer encodes from the
+    // same device.
+    auto masterDevice = duplicators.front()->Device();
     std::shared_ptr<SharedSurface> sharedSurface = std::make_shared<SharedSurface>(
-        duplicator->Device(),
+        masterDevice,
         width,
         height
     );
-    std::unique_ptr<ScreenMediaSinkWriter> writer;
     {
         std::wstring fileNameW{ fileName };
         EncodingContext encodingContext{};
@@ -204,45 +356,37 @@ void PipelineThread(
         encodingContext.bitRate = bitRate;
         encodingContext.videoInputMediaType = videoMediaType;
         encodingContext.audioInputMediaType = audioMediaType;
-        encodingContext.device = duplicator->Device();
+        encodingContext.device = masterDevice;
 
         writer = std::make_unique<ScreenMediaSinkWriter>(encodingContext);
     }
 
-    winrt::com_ptr<AsyncMediaSourceReader> audioReader;
-
-    auto audioCallback = [&writer, &stop](IMFSample* sample, HRESULT hr)
+    // Pre-roll the audio capture so the system AGC has time to
+    // converge on the user's voice level. Samples that arrive during
+    // this window flow through RNNoise (so its filter state warms up
+    // in lockstep with the audio it's about to suppress), but the
+    // gated WriteSample call in audioCallback drops them on the
+    // floor. Once warm-up elapses we Begin the writer and flip the
+    // flag — the next audio packet is the first one that lands in
+    // the encoded file, and it lands at full AGC gain.
+    if (audioCapture)
     {
-        if (sample == nullptr && FAILED(hr))
-        {
-            stop->store(true);
-        }
-
-        sample->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Audio);
-        writer->WriteSample(sample);
-    };
-
-    if (audioMediaSource)
-    {
-        audioReader.attach(new AsyncMediaSourceReader{
-            audioMediaSource,
-            audioCallback,
-            1000 / frameRate,
-            (DWORD)MF_SOURCE_READER_FIRST_AUDIO_STREAM });
+        audioCapture->Start();
+        std::this_thread::sleep_for(kAudioWarmUpDuration);
     }
 
     writer->Begin();
-
-    if (audioReader)
-    {
-        audioReader->Start();
-    }
+    // Release-store pairs with the acquire-load in audioCallback so
+    // the callback thread sees the writer's post-Begin state before
+    // it sees the flag flip.
+    audioWarmUpDone.store(true, std::memory_order_release);
 
     // Enable away mode and prevent display and system idle timeouts
     (void)SetThreadExecutionState(ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED | ES_AWAYMODE_REQUIRED | ES_CONTINUOUS);
 
     std::unique_ptr<Pipeline> duplicationPipeline = std::make_unique<Pipeline>(
-        duplicator,
+        duplicators,
+        desktopPointer,
         sharedSurface,
         virtualDesktop->VirtualDesktopBounds()
     );
@@ -272,30 +416,49 @@ void PipelineThread(
 
     // clear resources
     {
-        if (audioReader)
+        if (audioCapture)
         {
-            audioReader->Stop();
-            audioReader = nullptr;
+            audioCapture->Stop();
+            audioCapture.reset();
         }
 
         writer->End();
-
         writer.reset(nullptr);
 
+        // Release the pipeline (drops its MonitorContributors which
+        // hold opened views of the shared surface on each device),
+        // then the duplicators, then the shared surface.
+        duplicationPipeline.reset();
+
+        std::vector<winrt::com_ptr<ID3D11Device>> devices;
+        devices.reserve(duplicators.size());
+        for (auto const& dup : duplicators)
+        {
+            devices.push_back(dup->Device());
+        }
+        duplicators.clear();
+        sharedSurface.reset();
         desktopMonitors.clear();
 
+        // Flush every device we used. With multi-GPU there can be more
+        // than one — each needs to drop pending GPU work before we
+        // MFShutdown, otherwise the debug layer reports dangling MF
+        // references on objects still queued.
+        for (auto const& device : devices)
         {
-            auto device = duplicator->Device();
-            duplicator.reset();
-
             winrt::com_ptr<ID3D11DeviceContext> context;
             device->GetImmediateContext(context.put());
             context->ClearState();
             context->Flush();
 
 #if _DEBUG
-            auto debug = device.as<ID3D11Debug>();
-            debug->ReportLiveDeviceObjects(D3D11_RLDO_DETAIL);
+            // Only available when the Graphics Tools optional Windows
+            // feature is installed and DxResource succeeded in creating
+            // a debug-layer device; otherwise the QI returns null.
+            if (auto debug = device.try_as<ID3D11Debug>())
+            {
+                debug->ReportLiveDeviceObjects(D3D11_RLDO_DETAIL);
+            }
 #endif
         }
     }
@@ -350,7 +513,7 @@ struct RecordingContext
     }
 };
 
-std::unique_ptr<RecordingContext> StartRecording(hstring filename, size_t monitorIndex, RECT monitorBounds, WindowFactory<BorderWindow>& windowFactory)
+std::unique_ptr<RecordingContext> StartRecording(hstring filename, RECT borderBounds, WindowFactory<BorderWindow>& windowFactory)
 {
     std::unique_ptr<RecordingContext> recordingThread{ new RecordingContext{} };
     recordingThread->stopThread.reset(new atomic_bool{ false });
@@ -358,14 +521,16 @@ std::unique_ptr<RecordingContext> StartRecording(hstring filename, size_t monito
     recordingThread->stopRecordingByUser.reset(new atomic_bool{ false });
     recordingThread->borderWindow = std::move(windowFactory.NewWindow());
 
+    // Border covers the whole virtual desktop now that we record every
+    // monitor at once.
     recordingThread->borderWindow->SizeAndPosition(
-        monitorBounds.left,
-        monitorBounds.top,
-        monitorBounds.right - monitorBounds.left + 1,
-        monitorBounds.bottom - monitorBounds.top + 1
+        borderBounds.left,
+        borderBounds.top,
+        borderBounds.right - borderBounds.left + 1,
+        borderBounds.bottom - borderBounds.top + 1
     );
 
-    JsonObject data = MakeRecordCommand(filename, monitorIndex);
+    JsonObject data = MakeRecordCommand(filename, 0);
 
     recordingThread->pipelineThread = std::thread {
         PipelineThread,
@@ -384,7 +549,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     UNREFERENCED_PARAMETER(nCmdShow);
 
     std::wstring fileNameBase = L"test-recording";
-    size_t monitorIndex = 0;
 
     check_hresult(MFStartup(MF_VERSION));
     init_apartment();
@@ -434,27 +598,21 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     int fileNumber = 0;
 
     // https://docs.microsoft.com/en-us/windows/win32/learnwin32/window-messages
+    // The Window class posts WM_QUIT from its WM_DESTROY handler, which is
+    // what makes GetMessage return 0 and break this loop. We then tear
+    // down the recording thread AFTER the loop, so window close isn't
+    // blocked on joining the pipeline+audio threads.
     MSG msg = { };
     while (GetMessage(&msg, NULL, 0, 0))
     {
-        // https://docs.microsoft.com/en-us/windows/win32/learnwin32/closing-the-window
-        if (window && window->Closed())
-        {
-            if (recordingThread)
-            {
-                recordingThread.reset();
-            }
-            PostQuitMessage(0);
-        }
-
         if (msg.message == startRecordingMessage)
         {
             std::wstringstream ss;
             ss << fileNameBase << "-" << fileNumber++ << ".mp4";
             hstring filename{ ss.str() };
-            std::vector<DesktopMonitor> desktopMonitors = virtualDesktop->GetAllDesktopMonitors();
-            RECT monitorBounds = desktopMonitors[monitorIndex].DesktopMonitorBounds();
-            recordingThread = std::move(StartRecording(filename, monitorIndex, monitorBounds, borderWindowFactory));
+            // Border + recording target are now the entire virtual
+            // desktop; Pipeline captures from every monitor.
+            recordingThread = std::move(StartRecording(filename, virtualDesktop->VirtualDesktopBounds(), borderWindowFactory));
         }
         else if (msg.message == stopRecordingMessage)
         {
@@ -476,6 +634,13 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 
         TranslateMessage(&msg);
         DispatchMessage(&msg);
+    }
+
+    // After WM_QUIT: stop the recording thread (joins the pipeline and
+    // audio capture threads via RecordingContext's dtor) before MFShutdown.
+    if (recordingThread)
+    {
+        recordingThread.reset(nullptr);
     }
 
     winrt::check_hresult(MFShutdown());

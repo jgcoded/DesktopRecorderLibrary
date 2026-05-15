@@ -55,6 +55,8 @@ private:
     bool mIsWriting;
     std::chrono::high_resolution_clock::time_point mWriteStartTime;
     UINT32 mVideoFrameDuration;
+    LONGLONG mAudioBaselineTime;
+    bool mAudioBaselineSet;
 
     std::mutex mMutex;
 };

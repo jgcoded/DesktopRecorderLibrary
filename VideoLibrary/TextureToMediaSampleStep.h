@@ -19,19 +19,16 @@
 
 #pragma once
 
-#include "RecordingStep.h"
-
-class TextureToMediaSampleStep : public RecordingStep
+class TextureToMediaSampleStep
 {
 public:
     TextureToMediaSampleStep(
         winrt::com_ptr<ID3D11Texture2D> sourceTexture,
         winrt::com_ptr<TexturePool> texturePool);
 
-    virtual ~TextureToMediaSampleStep();
+    ~TextureToMediaSampleStep();
 
-    // Inherited via RecordingStep
-    virtual void Perform() override;
+    void Perform();
 
     winrt::com_ptr<IMFSample> Result();
 

@@ -20,9 +20,8 @@
 #pragma once
 
 #include "Frame.h"
-#include "RecordingStep.h"
 
-class RenderMoveRectsStep : public RecordingStep
+class RenderMoveRectsStep
 {
 public:
     RenderMoveRectsStep(
@@ -30,11 +29,10 @@ public:
         RECT virtualDesktopBounds,
         winrt::com_ptr<ID3D11Texture2D> stagingTexture,
         ID3D11Texture2D* sharedSurfacePtr);
-    
+
     ~RenderMoveRectsStep();
 
-    // Inherited via RecordingStep
-    virtual void Perform() override;
+    void Perform();
 
 private:
     winrt::com_ptr<ID3D11Texture2D> mStagingTexture;

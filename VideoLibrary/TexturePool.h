@@ -19,6 +19,8 @@
 
 #pragma once
 
+#include <unordered_map>
+
 #include "DesktopMonitor.h"
 
 class TexturePool : public IMFAsyncCallback
@@ -28,6 +30,12 @@ public:
     TexturePool(winrt::com_ptr<ID3D11Device> device, D3D11_TEXTURE2D_DESC desc);
 
     winrt::com_ptr<ID3D11Texture2D> Acquire();
+
+    // Lazily creates a render-target view for a texture handed out by
+    // Acquire(), caches it, and returns the cached value on subsequent
+    // calls. Avoids per-frame CreateRenderTargetView in the pointer
+    // composite step.
+    winrt::com_ptr<ID3D11RenderTargetView> RtvFor(ID3D11Texture2D* texture);
 
     virtual HRESULT STDMETHODCALLTYPE GetParameters(DWORD* pdwFlags, DWORD* pdwQueue) override;
 
@@ -55,6 +63,7 @@ private:
     winrt::com_ptr<ID3D11Device> mDevice;
     const D3D11_TEXTURE2D_DESC mTextureDesc;
     std::queue<winrt::com_ptr<ID3D11Texture2D>> mTexturePool;
+    std::unordered_map<ID3D11Texture2D*, winrt::com_ptr<ID3D11RenderTargetView>> mRtvCache;
     std::mutex mMutex;
     volatile long   m_refCount;
 

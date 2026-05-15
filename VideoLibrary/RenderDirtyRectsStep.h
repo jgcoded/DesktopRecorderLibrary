@@ -18,30 +18,31 @@
 */
 
 #pragma once
-#include "RecordingStep.h"
 #include "DesktopMonitor.h"
 #include "ShaderCache.h"
 #include "Frame.h"
 #include "Vertex.h"
 
-class RenderDirtyRectsStep : public RecordingStep
+class RenderDirtyRectsStep
 {
 public:
     RenderDirtyRectsStep(
         std::shared_ptr<Frame> frame,
         RECT virtualDesktopBounds,
         std::shared_ptr<std::vector<Vertex>> vertexBuffer,
+        winrt::com_ptr<ID3D11Buffer>& gpuVertexBuffer,
+        UINT& gpuVertexBufferCapacity,
         std::shared_ptr<ShaderCache> shaderCache,
         ID3D11Texture2D* sharedSurfacePtr,
-        winrt::com_ptr<ID3D11RenderTargetView> renderTargetView
+        winrt::com_ptr<ID3D11RenderTargetView> renderTargetView,
+        ColorSpaceCBData colorSpaceParams
         );
     ~RenderDirtyRectsStep();
 
-    // Inherited via RecordingStep
-    virtual void Perform() override;
+    void Perform();
 
 private:
-    
+
     void UpdateDirtyRects();
 
     void RenderDirtyRects();
@@ -49,7 +50,11 @@ private:
     std::shared_ptr<Frame> mFrame;
     RECT mVirtualDesktopBounds;
     std::shared_ptr<std::vector<Vertex>> mVertexBuffer;
+    // Persistent GPU buffer owned by Pipeline; grown here on demand.
+    winrt::com_ptr<ID3D11Buffer>& mGpuVertexBuffer;
+    UINT& mGpuVertexBufferCapacity;
     std::shared_ptr<ShaderCache> mShaderCache;
     ID3D11Texture2D* mSharedSurfacePtr;
     winrt::com_ptr<ID3D11RenderTargetView> mRenderTargetView;
+    ColorSpaceCBData mColorSpaceParams;
 };

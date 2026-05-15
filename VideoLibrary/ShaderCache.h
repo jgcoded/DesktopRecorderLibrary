@@ -18,6 +18,24 @@
 */
 
 #pragma once
+
+// CPU-side mirror of the cbuffer in PixelShader.hlsl. Must stay packed
+// to 16 bytes (HLSL cbuffer alignment).
+struct ColorSpaceCBData
+{
+    enum Mode : uint32_t
+    {
+        None = 0,           // source is already sRGB; passthrough
+        ScRgbLinearToSrgb = 1,
+        Hdr10PqToSrgb = 2,
+    };
+
+    uint32_t conversionMode;
+    float sdrWhiteNits;
+    float pad0;
+    float pad1;
+};
+
 class ShaderCache
 {
 public:
@@ -36,6 +54,11 @@ public:
 
     winrt::com_ptr<ID3D11BlendState> BlendState();
 
+    // Write the conversion params into the PS cbuffer and bind it to
+    // slot b0. Call this before every Draw that uses the pixel shader
+    // (one call per step is fine — the GPU cost is negligible).
+    void BindColorSpaceConversion(ID3D11DeviceContext* context, ColorSpaceCBData const& data);
+
 private:
 
     void Initialize(winrt::com_ptr<ID3D11Device> device);
@@ -45,4 +68,5 @@ private:
     winrt::com_ptr<ID3D11PixelShader> mPixelShader;
     winrt::com_ptr<ID3D11SamplerState> mLinearSampler;
     winrt::com_ptr<ID3D11BlendState> mBlendState;
+    winrt::com_ptr<ID3D11Buffer> mColorSpaceCB;
 };

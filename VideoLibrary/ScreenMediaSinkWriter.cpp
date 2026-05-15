@@ -30,6 +30,8 @@ ScreenMediaSinkWriter::ScreenMediaSinkWriter(const EncodingContext& encodingCont
     , mWriteStartTime{ std::chrono::nanoseconds{ MAXLONGLONG } }
     , mDevice{ encodingContext.device }
     , mAudioStreamIndex { 0 }
+    , mAudioBaselineTime{ 0 }
+    , mAudioBaselineSet{ false }
 {
     auto mediaEncodingProfile = MediaEncodingProfile::CreateMp4(encodingContext.resolutionOption);
 
@@ -85,12 +87,50 @@ ScreenMediaSinkWriter::ScreenMediaSinkWriter(const EncodingContext& encodingCont
 
     winrt::check_hresult(mVideoOutputMediaType->SetUINT32(MF_MT_AVG_BITRATE, bitRate));
     winrt::check_hresult(mVideoOutputMediaType->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive));
+    // The encoder emits *limited-range* BT.709 YUV regardless of our
+    // earlier full-range hints (verified empirically via ffprobe pixel
+    // sampling — stored values clip at [16, 235]). Tag the output to
+    // match that reality so Windows Media Player / Movies & TV doesn't
+    // try to "expand" what's already supposed to be RGB-space, which
+    // shows up as oversaturated chroma and lifted blacks.
+    //
+    // All four of NOMINAL_RANGE, YUV_MATRIX, VIDEO_PRIMARIES, and
+    // TRANSFER_FUNCTION must be set together for the MP4 sink to emit
+    // a `colr` atom in the container — that's the only signal these
+    // players read when the H.264 SPS VUI is absent.
+    winrt::check_hresult(mVideoOutputMediaType->SetUINT32(MF_MT_VIDEO_NOMINAL_RANGE, MFNominalRange_16_235));
+    winrt::check_hresult(mVideoOutputMediaType->SetUINT32(MF_MT_YUV_MATRIX, MFVideoTransferMatrix_BT709));
+    winrt::check_hresult(mVideoOutputMediaType->SetUINT32(MF_MT_VIDEO_PRIMARIES, MFVideoPrimaries_BT709));
+    winrt::check_hresult(mVideoOutputMediaType->SetUINT32(MF_MT_TRANSFER_FUNCTION, MFVideoTransFunc_709));
     winrt::check_hresult(MFSetAttributeSize(mVideoOutputMediaType.get(), MF_MT_FRAME_SIZE, width, height));
     winrt::check_hresult(MFSetAttributeRatio(mVideoOutputMediaType.get(), MF_MT_FRAME_RATE, frameRate.Numerator(), frameRate.Denominator()));
     winrt::check_hresult(mSinkWriter->AddStream(mVideoOutputMediaType.get(), &mVideoStreamIndex));
-    
+
     // set video input media type
     winrt::check_hresult(mSinkWriter->SetInputMediaType(mVideoStreamIndex, mVideoInputMediaType.get(), nullptr));
+
+    // Best-effort: ask the encoder via ICodecAPI to use 0-255 RGB input
+    // and 16-235 YUV output for its internal color conversion. Microsoft's
+    // built-in H.264 MFT returns E_NOTIMPL on both properties (verified
+    // empirically), so this is a no-op there; left in place because
+    // third-party encoders sometimes honor it. The MP4 container's colr
+    // atom is what actually carries the tags downstream.
+    {
+        winrt::com_ptr<ICodecAPI> codec;
+        if (SUCCEEDED(mSinkWriter->GetServiceForStream(
+                mVideoStreamIndex, GUID_NULL, IID_PPV_ARGS(codec.put())))
+            && codec)
+        {
+            VARIANT range;
+            VariantInit(&range);
+            range.vt = VT_UI4;
+            range.ulVal = eAVEncVideoColorNominalRange_0_255;
+            (void)codec->SetValue(&CODECAPI_AVEncVideoInputColorNominalRange, &range);
+            range.ulVal = eAVEncVideoColorNominalRange_16_235;
+            (void)codec->SetValue(&CODECAPI_AVEncVideoOutputColorNominalRange, &range);
+            VariantClear(&range);
+        }
+    }
 
     if (!mAudioInputMediaType)
     {
@@ -101,17 +141,47 @@ ScreenMediaSinkWriter::ScreenMediaSinkWriter(const EncodingContext& encodingCont
 
     if (audioQuality == AudioQuality::Auto)
     {
-        audioQuality = AudioQuality::Medium;
+        // Medium (96 kbps stereo) is too aggressive for voice — produces
+        // the warbly AAC artifacts users associate with bad recordings.
+        // High (~192 kbps stereo) is a meaningful audible improvement.
+        audioQuality = AudioQuality::High;
     }
 
     auto audioProps = MediaEncodingProfile::CreateM4a(audioQuality).Audio();
 
-    // create audio output media type
+    UINT32 audioBitsPerSample = audioProps.BitsPerSample();
+    UINT32 audioSampleRate = audioProps.SampleRate();
+    UINT32 audioNumChannels = audioProps.ChannelCount();
+    UINT32 audioBitrate = audioProps.Bitrate() / 8;
 
-    auto audioBitsPerSample = audioProps.BitsPerSample();
-    auto audioSampleRate = audioProps.SampleRate();
-    auto audioNumChannels = audioProps.ChannelCount();
-    auto audioBitrate = audioProps.Bitrate() / 8;
+    // Match the encoder output to the source's actual sample rate and
+    // channel layout. Otherwise MF has to resample (e.g. 48 kHz mic ->
+    // 44.1 kHz output) or up/downmix, which costs CPU and can introduce
+    // audible artifacts on top of the AAC compression.
+    UINT32 sourceSampleRate = 0;
+    if (SUCCEEDED(mAudioInputMediaType->GetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND, &sourceSampleRate))
+        && sourceSampleRate > 0)
+    {
+        audioSampleRate = sourceSampleRate;
+    }
+
+    UINT32 sourceChannels = 0;
+    if (SUCCEEDED(mAudioInputMediaType->GetUINT32(MF_MT_AUDIO_NUM_CHANNELS, &sourceChannels))
+        && sourceChannels > 0)
+    {
+        // Only scale UP when the source has more channels than the
+        // profile (very unusual). Don't scale DOWN for mono: a "High"
+        // quality choice should mean High whether the source is mono
+        // or stereo. Mono at the profile's nominal stereo bitrate is
+        // unambiguously high-quality voice (192 kbps AAC mono is far
+        // beyond conference-call needs).
+        if (audioNumChannels > 0 && sourceChannels > audioNumChannels)
+        {
+            audioBitrate = static_cast<UINT32>(
+                (static_cast<uint64_t>(audioBitrate) * sourceChannels) / audioNumChannels);
+        }
+        audioNumChannels = sourceChannels;
+    }
 
     // AAC output media type https://msdn.microsoft.com/en-us/library/dd742785(v=vs.85).aspx
     winrt::check_hresult(MFCreateMediaType(mAudioOutputMediaType.put()));
@@ -139,6 +209,7 @@ void ScreenMediaSinkWriter::Begin()
 {
     std::lock_guard<std::mutex> lock{ mMutex };
     mIsWriting = true;
+    mAudioBaselineSet = false;
     try
     {
         winrt::check_hresult(mSinkWriter->BeginWriting());
@@ -190,21 +261,40 @@ void ScreenMediaSinkWriter::WriteSample(IMFSample* sample)
 
     if (sampleType == MFMediaType_Video)
     {
-        auto frameCaptureTime = std::chrono::high_resolution_clock::now();
-        auto frameTime = (frameCaptureTime - mWriteStartTime).count() / 100;
-
-        winrt::check_hresult(sample->SetSampleTime(frameTime));
+        // If the caller (Pipeline) already attached a presentation time
+        // derived from the GPU's frame present timestamp, keep it. That
+        // preserves the encoded timeline through dropped/skipped frames.
+        // Otherwise fall back to wall-clock relative to Begin().
+        LONGLONG existingTime = 0;
+        HRESULT timeHr = sample->GetSampleTime(&existingTime);
+        if (timeHr == MF_E_NO_SAMPLE_TIMESTAMP)
+        {
+            auto frameCaptureTime = std::chrono::high_resolution_clock::now();
+            auto frameTime = (frameCaptureTime - mWriteStartTime).count() / 100;
+            winrt::check_hresult(sample->SetSampleTime(frameTime));
+        }
+        else
+        {
+            winrt::check_hresult(timeHr);
+        }
         winrt::check_hresult(sample->SetSampleDuration(mVideoFrameDuration));
 
         mSinkWriter->WriteSample(mVideoStreamIndex, sample);
     }
     else if (sampleType == MFMediaType_Audio)
     {
+        // Audio sample times come from the MF source reader in its own
+        // 100ns clock domain (epoch depends on the source). Rebase to the
+        // first sample we receive so audio starts at 0 in the output;
+        // MF aligns the audio and video tracks from there.
         LONGLONG sampleTime;
-        sample->GetSampleTime(&sampleTime);
-        auto startTime = mWriteStartTime.time_since_epoch().count() / 100;
-        sampleTime = sampleTime - startTime;
-        sample->SetSampleTime(sampleTime);
+        winrt::check_hresult(sample->GetSampleTime(&sampleTime));
+        if (!mAudioBaselineSet)
+        {
+            mAudioBaselineTime = sampleTime;
+            mAudioBaselineSet = true;
+        }
+        winrt::check_hresult(sample->SetSampleTime(sampleTime - mAudioBaselineTime));
         mSinkWriter->WriteSample(mAudioStreamIndex, sample);
     }
 }

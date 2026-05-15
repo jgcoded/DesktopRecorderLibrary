@@ -75,6 +75,18 @@ void ShaderCache::Initialize(winrt::com_ptr<ID3D11Device> device)
     SampDesc.MaxLOD = D3D11_FLOAT32_MAX;
     winrt::check_hresult(device->CreateSamplerState(&SampDesc, mLinearSampler.put()));
 
+    // Color-space conversion constant buffer for the pixel shader. Sized
+    // to 16 bytes (HLSL cbuffer alignment). Dynamic so we can rewrite it
+    // per draw via WRITE_DISCARD.
+    {
+        D3D11_BUFFER_DESC cbDesc{};
+        cbDesc.ByteWidth = sizeof(ColorSpaceCBData);
+        cbDesc.Usage = D3D11_USAGE_DYNAMIC;
+        cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+        cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+        winrt::check_hresult(device->CreateBuffer(&cbDesc, nullptr, mColorSpaceCB.put()));
+    }
+
     // Blend state
     // Create the blend state
     D3D11_BLEND_DESC BlendStateDesc;
@@ -123,4 +135,15 @@ winrt::com_ptr<ID3D11SamplerState> ShaderCache::LinearSampler()
 winrt::com_ptr<ID3D11BlendState> ShaderCache::BlendState()
 {
     return mBlendState;
+}
+
+void ShaderCache::BindColorSpaceConversion(ID3D11DeviceContext* context, ColorSpaceCBData const& data)
+{
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    winrt::check_hresult(context->Map(mColorSpaceCB.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
+    memcpy(mapped.pData, &data, sizeof(data));
+    context->Unmap(mColorSpaceCB.get(), 0);
+
+    ID3D11Buffer* cb = mColorSpaceCB.get();
+    context->PSSetConstantBuffers(0, 1, &cb);
 }

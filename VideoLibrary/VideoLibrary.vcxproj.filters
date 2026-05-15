@@ -12,6 +12,18 @@
     <Filter Include="Recording Steps">
       <UniqueIdentifier>{765a2b4c-d921-4320-ac55-00a5cb151103}</UniqueIdentifier>
     </Filter>
+    <Filter Include="third_party">
+      <UniqueIdentifier>{1a2b6dc7-ec9f-4f73-8a55-2c7d5d8e9011}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="third_party\rnnoise">
+      <UniqueIdentifier>{a1c0e6ec-71f5-4d3c-a86a-3f5c1b8d8b04}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="third_party\rnnoise\include">
+      <UniqueIdentifier>{b2d1f7fd-8a3c-4d51-9b66-3f8e6c9a0c12}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="third_party\rnnoise\src">
+      <UniqueIdentifier>{c3e2089e-9b4d-4e62-ac77-40f9d0bb1d23}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h">
@@ -23,8 +35,8 @@
     <ClInclude Include="DesktopMonitor.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="RecordingStep.h">
-      <Filter>Recording Steps</Filter>
+    <ClInclude Include="MonitorContributor.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="DesktopPointer.h">
       <Filter>Header Files</Filter>
@@ -54,6 +66,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="AsyncMediaSourceReader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="CommunicationsAudioCapture.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="AudioMedia.h">
@@ -95,6 +110,45 @@
     <ClInclude Include="SharedSurface.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="RnnoiseFilter.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\rnnoise\include\rnnoise.h">
+      <Filter>third_party\rnnoise\include</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\rnnoise\src\_kiss_fft_guts.h">
+      <Filter>third_party\rnnoise\src</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\rnnoise\src\arch.h">
+      <Filter>third_party\rnnoise\src</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\rnnoise\src\celt_lpc.h">
+      <Filter>third_party\rnnoise\src</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\rnnoise\src\common.h">
+      <Filter>third_party\rnnoise\src</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\rnnoise\src\kiss_fft.h">
+      <Filter>third_party\rnnoise\src</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\rnnoise\src\opus_types.h">
+      <Filter>third_party\rnnoise\src</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\rnnoise\src\pitch.h">
+      <Filter>third_party\rnnoise\src</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\rnnoise\src\rnn.h">
+      <Filter>third_party\rnnoise\src</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\rnnoise\src\rnn_data.h">
+      <Filter>third_party\rnnoise\src</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\rnnoise\src\tansig_table.h">
+      <Filter>third_party\rnnoise\src</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\rnnoise\src\vla_shim.h">
+      <Filter>third_party\rnnoise\src</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -106,8 +160,8 @@
     <ClCompile Include="DesktopMonitor.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="RecordingStep.cpp">
-      <Filter>Recording Steps</Filter>
+    <ClCompile Include="MonitorContributor.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="DesktopPointer.cpp">
       <Filter>Source Files</Filter>
@@ -131,6 +185,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="AsyncMediaSourceReader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CommunicationsAudioCapture.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="AudioMedia.cpp">
@@ -162,6 +219,30 @@
     </ClCompile>
     <ClCompile Include="SharedSurface.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="RnnoiseFilter.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="third_party\rnnoise\src\celt_lpc.c">
+      <Filter>third_party\rnnoise\src</Filter>
+    </ClCompile>
+    <ClCompile Include="third_party\rnnoise\src\denoise.c">
+      <Filter>third_party\rnnoise\src</Filter>
+    </ClCompile>
+    <ClCompile Include="third_party\rnnoise\src\kiss_fft.c">
+      <Filter>third_party\rnnoise\src</Filter>
+    </ClCompile>
+    <ClCompile Include="third_party\rnnoise\src\pitch.c">
+      <Filter>third_party\rnnoise\src</Filter>
+    </ClCompile>
+    <ClCompile Include="third_party\rnnoise\src\rnn.c">
+      <Filter>third_party\rnnoise\src</Filter>
+    </ClCompile>
+    <ClCompile Include="third_party\rnnoise\src\rnn_data.c">
+      <Filter>third_party\rnnoise\src</Filter>
+    </ClCompile>
+    <ClCompile Include="third_party\rnnoise\src\rnn_reader.c">
+      <Filter>third_party\rnnoise\src</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

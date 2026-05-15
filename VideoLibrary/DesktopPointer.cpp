@@ -115,10 +115,45 @@ void DesktopPointer::UpdateTexture(winrt::com_ptr<ID3D11Texture2D> const& newIma
 
 winrt::com_ptr<ID3D11Texture2D> DesktopPointer::Texture() const
 {
+    // PutBuffer marks the cache stale whenever DDA delivers a new shape;
+    // surface null to consumers so they regenerate the GPU texture.
+    if (mIsPointerTextureStale)
+    {
+        return nullptr;
+    }
     return mPointerTexture;
 }
 
 bool DesktopPointer::Visible() const
 {
     return mVisible;
+}
+
+void DesktopPointer::UpdateFromFrame(
+    DXGI_OUTDUPL_FRAME_INFO const& frameInfo,
+    IDXGIOutputDuplication* duplication,
+    UINT outputIndex,
+    RECT desktopMonitorBounds)
+{
+    // DDA reports a new pointer shape only when both the mouse-update
+    // time is non-zero and the shape buffer has bytes. Pull it before
+    // the position update so Position() sees a coherent (shape, pos)
+    // pair if anyone observes between the two calls.
+    if (frameInfo.LastMouseUpdateTime.QuadPart != 0 && frameInfo.PointerShapeBufferSize != 0)
+    {
+        UINT requiredBufferSize = 0;
+        DXGI_OUTDUPL_POINTER_SHAPE_INFO pointerInfo{};
+        winrt::check_hresult(duplication->GetFramePointerShape(
+            frameInfo.PointerShapeBufferSize,
+            reinterpret_cast<void*>(PutBuffer(frameInfo.PointerShapeBufferSize)),
+            &requiredBufferSize,
+            &pointerInfo));
+        ShapeInfo(pointerInfo);
+    }
+
+    UpdatePosition(
+        frameInfo.PointerPosition,
+        frameInfo.LastMouseUpdateTime,
+        outputIndex,
+        desktopMonitorBounds);
 }

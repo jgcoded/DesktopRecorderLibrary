@@ -33,6 +33,7 @@
 #include <d3d11.h>
 #include <dxgi.h>
 #include <dxgi1_2.h>
+#include <dxgi1_6.h>
 
 #include <Mferror.h>
 #include <mfapi.h>

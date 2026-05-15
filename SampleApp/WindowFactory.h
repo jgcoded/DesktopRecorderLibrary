@@ -106,6 +106,17 @@ protected:
             return 0;
         }
 
+        case WM_DESTROY:
+        {
+            // Standard Win32 idiom: posting WM_QUIT here is what makes
+            // GetMessage return 0 and break the main loop. Without this
+            // the loop blocks on GetMessage forever after the window is
+            // gone — the visible window has closed but the process is
+            // still running.
+            PostQuitMessage(0);
+            return 0;
+        }
+
         // https://docs.microsoft.com/en-us/windows/win32/menurc/wm-command
         case WM_COMMAND:
         {
@@ -193,7 +204,7 @@ protected:
                 LWA_COLORKEY | LWA_ALPHA);
 
             SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE);
-            SetWindowLong(hwnd, GWL_STYLE, 0);  // Without 1 point border = white rectangle 
+            SetWindowLong(hwnd, GWL_STYLE, 0);  // Without 1 point border = white rectangle
             SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_FRAMECHANGED);
             ShowWindow(hwnd, SW_SHOWDEFAULT);
             break;
@@ -201,6 +212,11 @@ protected:
         case WM_SIZE:
             Repaint();
             break;
+        case WM_DESTROY:
+            // Border windows are throwaway overlays during recording;
+            // destroying one must NOT post WM_QUIT. Consume here so the
+            // message doesn't fall through to Window::WndProc which would.
+            return 0;
         default:
             return Window::WndProc(hwnd, msg, wparam, lparam);
         }

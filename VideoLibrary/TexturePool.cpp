@@ -19,7 +19,6 @@
 
 #include "pch.h"
 #include "DesktopMonitor.h"
-#include "RecordingStep.h"
 #include "CaptureFrameStep.h"
 #include "VirtualDesktop.h"
 #include "TexturePool.h"
@@ -41,6 +40,24 @@ winrt::com_ptr<ID3D11Texture2D> TexturePool::Acquire()
     auto texture = mTexturePool.front();
     mTexturePool.pop();
     return texture;
+}
+
+winrt::com_ptr<ID3D11RenderTargetView> TexturePool::RtvFor(ID3D11Texture2D* texture)
+{
+    winrt::check_pointer(texture);
+    std::lock_guard<std::mutex> lock{ mMutex };
+    auto it = mRtvCache.find(texture);
+    if (it != mRtvCache.end())
+    {
+        return it->second;
+    }
+    winrt::com_ptr<ID3D11RenderTargetView> rtv;
+    winrt::check_hresult(mDevice->CreateRenderTargetView(texture, nullptr, rtv.put()));
+    // The RTV refcounts the texture, so this cache also pins the
+    // textures it indexes — which is fine because the pool is meant to
+    // own its textures for the life of the recording.
+    mRtvCache.emplace(texture, rtv);
+    return rtv;
 }
 
 HRESULT __stdcall TexturePool::GetParameters(DWORD * pdwFlags, DWORD * pdwQueue)
@@ -79,7 +96,11 @@ winrt::com_ptr<ID3D11Texture2D> TexturePool::CreateTexture()
     moveDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
     moveDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED;
     winrt::com_ptr<ID3D11Texture2D> texture;
-    mDevice->CreateTexture2D(&moveDesc, nullptr, texture.put());
+    // Check the HRESULT — otherwise a failed allocation hands back a
+    // null com_ptr and downstream check_pointer calls only catch it
+    // some of the time (RenderPointerTextureStep uses virtualDesktopCopy
+    // immediately without a null check).
+    winrt::check_hresult(mDevice->CreateTexture2D(&moveDesc, nullptr, texture.put()));
     return texture;
 }
 

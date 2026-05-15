@@ -30,6 +30,7 @@ Frame::Frame(ScreenDuplicator& duplicator)
     , mMoveRects{ nullptr }
     , mDirtyRects{ nullptr }
     , mDesktopMonitorBounds{ }
+    , mFormat{ DXGI_FORMAT_UNKNOWN }
     , mRotation{ DXGI_MODE_ROTATION_UNSPECIFIED }
 {
     try
@@ -47,27 +48,24 @@ Frame::Frame(ScreenDuplicator& duplicator)
         mCaptured = true;
         mFrameTexture = desktopImageResource.as<ID3D11Texture2D>();
 
-        // Don't care about move or dirty rects, just get the pointer data and update the pointer cache
-        if (mFrameInfo.LastMouseUpdateTime.QuadPart != 0 && mFrameInfo.PointerShapeBufferSize != 0) {
-
-            UINT requiredBufferSize;
-            DXGI_OUTDUPL_POINTER_SHAPE_INFO pointerInfo;
-            winrt::check_hresult(mDupl->GetFramePointerShape(mFrameInfo.PointerShapeBufferSize,
-                reinterpret_cast<void*>(duplicator.DesktopPointerPtr()->PutBuffer(mFrameInfo.PointerShapeBufferSize)),
-                &requiredBufferSize,
-                &pointerInfo));
-
-            duplicator.DesktopPointerPtr()->ShapeInfo(pointerInfo);
-        }
+        // Capture the DXGI format so Pipeline can pick a per-frame
+        // color conversion. DDA flips between BGRA8 and FP16 when HDR
+        // is enabled depending on whether any HDR content is on screen.
+        D3D11_TEXTURE2D_DESC td{};
+        mFrameTexture->GetDesc(&td);
+        mFormat = td.Format;
 
         DXGI_OUTPUT_DESC desc;
         winrt::check_hresult(duplicator.Output()->GetDesc(&desc));
         mDesktopMonitorBounds = desc.DesktopCoordinates;
         mRotation = desc.Rotation;
 
-        duplicator.DesktopPointerPtr()->UpdatePosition(
-            mFrameInfo.PointerPosition,
-            mFrameInfo.LastMouseUpdateTime,
+        // Pointer state lives on DesktopPointer; let it own its own
+        // refresh from the frame info we just captured rather than
+        // reaching in to mutate it from Frame.
+        duplicator.DesktopPointerPtr()->UpdateFromFrame(
+            mFrameInfo,
+            mDupl.get(),
             duplicator.OutputIndex(),
             mDesktopMonitorBounds);
 
@@ -129,19 +127,10 @@ RECT Frame::DesktopMonitorBounds() const
 
 int64_t Frame::PresentationTime() const
 {
-    //    LARGE_INTEGER frequency;
-      //  QueryPerformanceFrequency(&frequency);
-
-    int64_t nanoSeconds = mFrameInfo.LastPresentTime.QuadPart;
-
-    // ticks / ticks per second = seconds
-    // save precision by dividing first and then multipling by 1e9 (1e9 ns in one sec)
-
-  //  nanoSeconds /= frequency.QuadPart;
-  //  nanoSeconds *= 1'000'000'000;
-
-
-    return nanoSeconds;
+    // Raw QPC ticks of when the GPU presented this frame. Convert via
+    // QueryPerformanceFrequency. Returns 0 when DDA didn't report a
+    // present time (e.g. AcquireNextFrame timeout).
+    return mFrameInfo.LastPresentTime.QuadPart;
 }
 
 bool Frame::Captured() const

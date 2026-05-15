@@ -29,11 +29,51 @@ ScreenDuplicator::ScreenDuplicator(
     , mDesktopPointer{ desktopPointer }
     , mRectBuffer{ std::make_shared<std::vector<byte>>() }
     , mOutputIndex{ monitor.OutputIndex() }
+    , mColorSpace{ DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709 }
 {
-    HRESULT hr = mOutput->DuplicateOutput(mDevice.get(), mDupl.put());
+    // Prefer DuplicateOutput1 with a format preference list so we get the
+    // native framebuffer format DWM is composing in. Microsoft documents
+    // plain DuplicateOutput as always coercing to BGRA8 — and the auto-
+    // conversion path is the source of the "oversaturated colors with HDR
+    // on" bug (Microsoft Q&A on this is explicit). With DuplicateOutput1
+    // and FP16 in the list, HDR mode delivers R16G16B16A16_FLOAT (scRGB
+    // linear Rec.709) and SDR mode delivers BGRA8 — both predictable.
+    HRESULT hr = E_NOTIMPL;
+    winrt::com_ptr<IDXGIOutput5> output5;
+    if (SUCCEEDED(mOutput->QueryInterface(__uuidof(IDXGIOutput5), output5.put_void())))
+    {
+        DXGI_FORMAT preferredFormats[] = {
+            DXGI_FORMAT_R16G16B16A16_FLOAT,  // scRGB linear Rec.709 (HDR)
+            DXGI_FORMAT_R10G10B10A2_UNORM,   // HDR10 PQ Rec.2020 (rare on the desktop)
+            DXGI_FORMAT_B8G8R8A8_UNORM,      // sRGB Rec.709 (SDR)
+        };
+        hr = output5->DuplicateOutput1(mDevice.get(), 0,
+            ARRAYSIZE(preferredFormats), preferredFormats, mDupl.put());
+    }
+    if (FAILED(hr))
+    {
+        // Fall back to plain DuplicateOutput on older OS / driver combos
+        // where IDXGIOutput5 isn't available. Will hit the buggy auto-
+        // converted BGRA8 path under HDR but at least works on SDR.
+        hr = mOutput->DuplicateOutput(mDevice.get(), mDupl.put());
+    }
     if (FAILED(hr))
     {
         ThrowExceptionCheckRecoverable(mDevice, CreateDuplicationExpectedErrors, hr);
+    }
+
+    // Read the output's color space so Pipeline can dispatch to the
+    // right shader conversion for HDR modes (scRGB FP16 or HDR10 PQ).
+    {
+        winrt::com_ptr<IDXGIOutput6> output6;
+        if (SUCCEEDED(mOutput->QueryInterface(__uuidof(IDXGIOutput6), output6.put_void())))
+        {
+            DXGI_OUTPUT_DESC1 desc1{};
+            if (SUCCEEDED(output6->GetDesc1(&desc1)))
+            {
+                mColorSpace = desc1.ColorSpace;
+            }
+        }
     }
 }
 

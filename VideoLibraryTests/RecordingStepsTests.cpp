@@ -50,7 +50,7 @@ namespace VideoLibraryTests
                 duplicators.push_back(duplicator);
             }
 
-            std::unique_ptr<RecordingStep> recordingStep;
+            std::unique_ptr<CaptureFrameStep> recordingStep;
             int i = 0;
             for (auto& duplicator : duplicators) {
 

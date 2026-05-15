@@ -73,6 +73,7 @@
       <PreprocessorDefinitions>_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <WarningLevel>Level4</WarningLevel>
       <AdditionalOptions>%(AdditionalOptions) /permissive- /bigobj</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir)third_party\rnnoise\include;$(ProjectDir)third_party\rnnoise\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
@@ -169,14 +170,28 @@
     <ClInclude Include="KeyedMutexLock.h" />
     <ClInclude Include="ScreenMediaSinkWriter.h" />
     <ClInclude Include="AsyncMediaSourceReader.h" />
+    <ClInclude Include="CommunicationsAudioCapture.h" />
     <ClInclude Include="SourceState.h" />
     <ClInclude Include="TexturePool.h" />
     <ClInclude Include="TextureToMediaSampleStep.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="DesktopPointer.h" />
-    <ClInclude Include="RecordingStep.h" />
+    <ClInclude Include="MonitorContributor.h" />
     <ClInclude Include="CaptureFrameStep.h" />
     <ClInclude Include="VirtualDesktop.h" />
+    <ClInclude Include="RnnoiseFilter.h" />
+    <ClInclude Include="third_party\rnnoise\include\rnnoise.h" />
+    <ClInclude Include="third_party\rnnoise\src\_kiss_fft_guts.h" />
+    <ClInclude Include="third_party\rnnoise\src\arch.h" />
+    <ClInclude Include="third_party\rnnoise\src\celt_lpc.h" />
+    <ClInclude Include="third_party\rnnoise\src\common.h" />
+    <ClInclude Include="third_party\rnnoise\src\kiss_fft.h" />
+    <ClInclude Include="third_party\rnnoise\src\opus_types.h" />
+    <ClInclude Include="third_party\rnnoise\src\pitch.h" />
+    <ClInclude Include="third_party\rnnoise\src\rnn.h" />
+    <ClInclude Include="third_party\rnnoise\src\rnn_data.h" />
+    <ClInclude Include="third_party\rnnoise\src\tansig_table.h" />
+    <ClInclude Include="third_party\rnnoise\src\vla_shim.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="DisplayAdapter.cpp" />
@@ -193,6 +208,7 @@
     <ClCompile Include="RenderPointerTextureStep.cpp" />
     <ClCompile Include="ScreenMediaSinkWriter.cpp" />
     <ClCompile Include="AsyncMediaSourceReader.cpp" />
+    <ClCompile Include="CommunicationsAudioCapture.cpp" />
     <ClCompile Include="SharedSurface.cpp" />
     <ClCompile Include="TexturePool.cpp" />
     <ClCompile Include="TextureToMediaSampleStep.cpp" />
@@ -200,9 +216,51 @@
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="DesktopPointer.cpp" />
-    <ClCompile Include="RecordingStep.cpp" />
+    <ClCompile Include="MonitorContributor.cpp" />
     <ClCompile Include="CaptureFrameStep.cpp" />
     <ClCompile Include="VirtualDesktop.cpp" />
+    <ClCompile Include="RnnoiseFilter.cpp" />
+    <ClCompile Include="third_party\rnnoise\src\celt_lpc.c">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>TurnOffAllWarnings</WarningLevel>
+      <PreprocessorDefinitions>_USE_MATH_DEFINES;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalOptions>%(AdditionalOptions) /wd4244 /wd4267 /wd4305</AdditionalOptions>
+    </ClCompile>
+    <ClCompile Include="third_party\rnnoise\src\denoise.c">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>TurnOffAllWarnings</WarningLevel>
+      <PreprocessorDefinitions>_USE_MATH_DEFINES;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalOptions>%(AdditionalOptions) /wd4244 /wd4267 /wd4305</AdditionalOptions>
+    </ClCompile>
+    <ClCompile Include="third_party\rnnoise\src\kiss_fft.c">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>TurnOffAllWarnings</WarningLevel>
+      <PreprocessorDefinitions>_USE_MATH_DEFINES;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalOptions>%(AdditionalOptions) /wd4244 /wd4267 /wd4305</AdditionalOptions>
+    </ClCompile>
+    <ClCompile Include="third_party\rnnoise\src\pitch.c">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>TurnOffAllWarnings</WarningLevel>
+      <PreprocessorDefinitions>_USE_MATH_DEFINES;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalOptions>%(AdditionalOptions) /wd4244 /wd4267 /wd4305</AdditionalOptions>
+    </ClCompile>
+    <ClCompile Include="third_party\rnnoise\src\rnn.c">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>TurnOffAllWarnings</WarningLevel>
+      <PreprocessorDefinitions>_USE_MATH_DEFINES;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalOptions>%(AdditionalOptions) /wd4244 /wd4267 /wd4305</AdditionalOptions>
+    </ClCompile>
+    <ClCompile Include="third_party\rnnoise\src\rnn_data.c">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>TurnOffAllWarnings</WarningLevel>
+      <PreprocessorDefinitions>_USE_MATH_DEFINES;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <ClCompile Include="third_party\rnnoise\src\rnn_reader.c">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>TurnOffAllWarnings</WarningLevel>
+      <PreprocessorDefinitions>_USE_MATH_DEFINES;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalOptions>%(AdditionalOptions) /wd4244 /wd4267 /wd4305</AdditionalOptions>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
