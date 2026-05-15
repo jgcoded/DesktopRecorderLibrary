@@ -60,6 +60,12 @@ public:
     // category is applied, so it reflects what the DSP actually outputs.
     winrt::com_ptr<IMFMediaType> MediaType() const { return mMediaType; }
 
+    // Raw wave-format pointer for downstream filters that need to
+    // inspect sample rate / channel count / sample size without
+    // going through MF attribute lookups. Owned by the capture; do
+    // not free.
+    const WAVEFORMATEX* WaveFormat() const { return mWaveFormat; }
+
     void Start();
     void Stop();
 

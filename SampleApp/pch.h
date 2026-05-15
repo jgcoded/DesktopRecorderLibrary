@@ -43,6 +43,7 @@
 #include <mfreadwrite.h>
 #include <evr.h>
 #include <windows.h>
+#include <mmreg.h>
 
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
@@ -57,6 +58,7 @@
 #include "VideoLibrary\Pipeline.h"
 #include "VideoLibrary\AsyncMediaSourceReader.h"
 #include "VideoLibrary\CommunicationsAudioCapture.h"
+#include "VideoLibrary\RnnoiseFilter.h"
 #include "VideoLibrary\ScreenMediaSinkWriter.h"
 #include "VideoLibrary\AudioMedia.h"
 #include "VideoLibrary\Errors.h"

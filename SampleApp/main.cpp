@@ -161,9 +161,27 @@ void PipelineThread(
     com_ptr<IMFMediaType> audioMediaType;
 
     std::unique_ptr<ScreenMediaSinkWriter> writer;
+
+    // RNNoise applies only when the capture format matches its
+    // training: 48 kHz mono FP32. CommunicationsAudioCapture is
+    // expected to produce exactly that on Windows engines, but
+    // gate explicitly so e.g. a stereo card silently bypasses
+    // rather than corrupting audio.
+    //
+    // Declared BEFORE audioCapture so destruction order joins the
+    // capture thread (~audioCapture) before the filter goes away.
+    // The explicit `audioCapture->Stop()` in the teardown block
+    // also makes this safe, but ordering belt-and-suspenders.
+    std::unique_ptr<RnnoiseFilter> rnnoise;
+    bool rnnoiseEnabled = false;
+    LONGLONG rnnoiseAccumStartTime100ns = 0;
+    bool rnnoiseAccumStartSet = false;
+
     std::unique_ptr<CommunicationsAudioCapture> audioCapture;
 
-    auto audioCallback = [&writer, &stop](IMFSample* sample, HRESULT hr)
+    auto audioCallback = [&writer, &stop, &rnnoise, &rnnoiseEnabled,
+                          &rnnoiseAccumStartTime100ns, &rnnoiseAccumStartSet](
+        IMFSample* sample, HRESULT hr)
     {
         if (sample == nullptr || FAILED(hr))
         {
@@ -171,7 +189,72 @@ void PipelineThread(
             return;
         }
         sample->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Audio);
-        writer->WriteSample(sample);
+
+        if (!rnnoiseEnabled || !rnnoise)
+        {
+            writer->WriteSample(sample);
+            return;
+        }
+
+        // Pull the float PCM out of the IMFSample, run it through
+        // RNNoise, and write back a new sample carrying the
+        // suppressed audio. The model emits in 480-sample chunks,
+        // so the output's frame count is floor((accum + in)/480)*480
+        // - prior accumulator; missing tail samples ride in the
+        // accumulator until the next packet completes a frame.
+        winrt::com_ptr<IMFMediaBuffer> inBuffer;
+        winrt::check_hresult(sample->GetBufferByIndex(0, inBuffer.put()));
+
+        BYTE* inData = nullptr;
+        DWORD inBytes = 0;
+        winrt::check_hresult(inBuffer->Lock(&inData, nullptr, &inBytes));
+        const size_t inFrames = inBytes / sizeof(float);
+
+        LONGLONG sampleTime = 0;
+        winrt::check_hresult(sample->GetSampleTime(&sampleTime));
+        // If the accumulator is empty, this packet's leading sample
+        // is the start of the next emitted frame's timeline.
+        if (!rnnoiseAccumStartSet)
+        {
+            rnnoiseAccumStartTime100ns = sampleTime;
+            rnnoiseAccumStartSet = true;
+        }
+
+        winrt::com_ptr<IMFMediaBuffer> outBuffer;
+        winrt::check_hresult(MFCreateMemoryBuffer(static_cast<DWORD>(inFrames * sizeof(float)), outBuffer.put()));
+
+        BYTE* outData = nullptr;
+        winrt::check_hresult(outBuffer->Lock(&outData, nullptr, nullptr));
+        const size_t outFrames = rnnoise->Process(
+            reinterpret_cast<const float*>(inData),
+            inFrames,
+            reinterpret_cast<float*>(outData));
+        winrt::check_hresult(outBuffer->Unlock());
+        winrt::check_hresult(inBuffer->Unlock());
+
+        if (outFrames == 0)
+        {
+            // Nothing drained yet; just accumulating. Drop this packet
+            // — the audio it carried will reappear in the next emit.
+            return;
+        }
+
+        winrt::check_hresult(outBuffer->SetCurrentLength(static_cast<DWORD>(outFrames * sizeof(float))));
+
+        winrt::com_ptr<IMFSample> outSample;
+        winrt::check_hresult(MFCreateSample(outSample.put()));
+        winrt::check_hresult(outSample->AddBuffer(outBuffer.get()));
+        outSample->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Audio);
+
+        const LONGLONG duration100ns = static_cast<LONGLONG>(outFrames) * 10'000'000 / 48000;
+        winrt::check_hresult(outSample->SetSampleTime(rnnoiseAccumStartTime100ns));
+        winrt::check_hresult(outSample->SetSampleDuration(duration100ns));
+
+        // The emitted samples cover [accumStart, accumStart + duration);
+        // whatever is still buffered starts where this output ended.
+        rnnoiseAccumStartTime100ns += duration100ns;
+
+        writer->WriteSample(outSample.get());
     };
 
     if (!audioEndpoint.empty())
@@ -183,6 +266,21 @@ void PipelineThread(
         audioCapture = std::make_unique<CommunicationsAudioCapture>(
             std::wstring{ audioEndpoint }, audioCallback);
         audioMediaType = audioCapture->MediaType();
+
+        // RNNoise gate: must be 48 kHz mono FP32 to match the training.
+        // Communications-mode shared-mode capture on Win10/11 reports
+        // plain WAVE_FORMAT_IEEE_FLOAT (0x3) at this configuration —
+        // not WAVE_FORMAT_EXTENSIBLE — so a tag-equality check is the
+        // right gate. Anything else passes through unfiltered.
+        const WAVEFORMATEX* wf = audioCapture->WaveFormat();
+        if (wf->wFormatTag == WAVE_FORMAT_IEEE_FLOAT
+            && wf->nSamplesPerSec == 48000
+            && wf->nChannels == 1
+            && wf->wBitsPerSample == 32)
+        {
+            rnnoise = std::make_unique<RnnoiseFilter>();
+            rnnoiseEnabled = true;
+        }
     }
 
     std::vector<DesktopMonitor> desktopMonitors = virtualDesktop->DesktopMonitors();
