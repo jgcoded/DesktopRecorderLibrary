@@ -55,27 +55,17 @@ Frame::Frame(ScreenDuplicator& duplicator)
         mFrameTexture->GetDesc(&td);
         mFormat = td.Format;
 
-        // Don't care about move or dirty rects, just get the pointer data and update the pointer cache
-        if (mFrameInfo.LastMouseUpdateTime.QuadPart != 0 && mFrameInfo.PointerShapeBufferSize != 0) {
-
-            UINT requiredBufferSize;
-            DXGI_OUTDUPL_POINTER_SHAPE_INFO pointerInfo;
-            winrt::check_hresult(mDupl->GetFramePointerShape(mFrameInfo.PointerShapeBufferSize,
-                reinterpret_cast<void*>(duplicator.DesktopPointerPtr()->PutBuffer(mFrameInfo.PointerShapeBufferSize)),
-                &requiredBufferSize,
-                &pointerInfo));
-
-            duplicator.DesktopPointerPtr()->ShapeInfo(pointerInfo);
-        }
-
         DXGI_OUTPUT_DESC desc;
         winrt::check_hresult(duplicator.Output()->GetDesc(&desc));
         mDesktopMonitorBounds = desc.DesktopCoordinates;
         mRotation = desc.Rotation;
 
-        duplicator.DesktopPointerPtr()->UpdatePosition(
-            mFrameInfo.PointerPosition,
-            mFrameInfo.LastMouseUpdateTime,
+        // Pointer state lives on DesktopPointer; let it own its own
+        // refresh from the frame info we just captured rather than
+        // reaching in to mutate it from Frame.
+        duplicator.DesktopPointerPtr()->UpdateFromFrame(
+            mFrameInfo,
+            mDupl.get(),
             duplicator.OutputIndex(),
             mDesktopMonitorBounds);
 

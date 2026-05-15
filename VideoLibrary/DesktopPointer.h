@@ -40,6 +40,16 @@ public:
     DXGI_OUTDUPL_POINTER_SHAPE_INFO ShapeInfo() const;
     void ShapeInfo(DXGI_OUTDUPL_POINTER_SHAPE_INFO newShapeInfo);
 
+    // Single-shot per-frame update: pulls the pointer shape buffer from
+    // the duplication (when DDA reports a new shape) and refreshes the
+    // position from the frame info. Keeps the pointer's state-mutation
+    // contained here instead of having Frame's ctor reach into us.
+    void UpdateFromFrame(
+        DXGI_OUTDUPL_FRAME_INFO const& frameInfo,
+        IDXGIOutputDuplication* duplication,
+        UINT outputIndex,
+        RECT desktopMonitorBounds);
+
     void UpdateTexture(winrt::com_ptr<ID3D11Texture2D> const& newImage);
     winrt::com_ptr<ID3D11Texture2D> Texture() const;
 
