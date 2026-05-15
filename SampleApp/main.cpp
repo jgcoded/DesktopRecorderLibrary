@@ -423,19 +423,13 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     int fileNumber = 0;
 
     // https://docs.microsoft.com/en-us/windows/win32/learnwin32/window-messages
+    // The Window class posts WM_QUIT from its WM_DESTROY handler, which is
+    // what makes GetMessage return 0 and break this loop. We then tear
+    // down the recording thread AFTER the loop, so window close isn't
+    // blocked on joining the pipeline+audio threads.
     MSG msg = { };
     while (GetMessage(&msg, NULL, 0, 0))
     {
-        // https://docs.microsoft.com/en-us/windows/win32/learnwin32/closing-the-window
-        if (window && window->Closed())
-        {
-            if (recordingThread)
-            {
-                recordingThread.reset();
-            }
-            PostQuitMessage(0);
-        }
-
         if (msg.message == startRecordingMessage)
         {
             std::wstringstream ss;
@@ -465,6 +459,13 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 
         TranslateMessage(&msg);
         DispatchMessage(&msg);
+    }
+
+    // After WM_QUIT: stop the recording thread (joins the pipeline and
+    // audio capture threads via RecordingContext's dtor) before MFShutdown.
+    if (recordingThread)
+    {
+        recordingThread.reset(nullptr);
     }
 
     winrt::check_hresult(MFShutdown());
