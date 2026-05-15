@@ -177,10 +177,24 @@ void PipelineThread(
     LONGLONG rnnoiseAccumStartTime100ns = 0;
     bool rnnoiseAccumStartSet = false;
 
+    // Pre-roll window: Communications-mode capture engages the system
+    // AGC, which starts at low gain and ramps up once it has measured
+    // the incoming signal. Without warm-up, the first ~second of a
+    // recording fades in as AGC converges. We start the capture early,
+    // run samples through RNNoise (so the filter state settles too)
+    // but discard the output until this flag flips — by which point
+    // AGC has stabilized.
+    //
+    // Atomic because the audio capture thread reads it on every
+    // callback while the main thread is the only writer.
+    constexpr auto kAudioWarmUpDuration = std::chrono::milliseconds(1000);
+    std::atomic<bool> audioWarmUpDone{ false };
+
     std::unique_ptr<CommunicationsAudioCapture> audioCapture;
 
     auto audioCallback = [&writer, &stop, &rnnoise, &rnnoiseEnabled,
-                          &rnnoiseAccumStartTime100ns, &rnnoiseAccumStartSet](
+                          &rnnoiseAccumStartTime100ns, &rnnoiseAccumStartSet,
+                          &audioWarmUpDone](
         IMFSample* sample, HRESULT hr)
     {
         if (sample == nullptr || FAILED(hr))
@@ -192,7 +206,12 @@ void PipelineThread(
 
         if (!rnnoiseEnabled || !rnnoise)
         {
-            writer->WriteSample(sample);
+            // Bypass path: nothing to warm up beyond the system AGC,
+            // so just gate the write.
+            if (audioWarmUpDone.load(std::memory_order_acquire))
+            {
+                writer->WriteSample(sample);
+            }
             return;
         }
 
@@ -260,9 +279,16 @@ void PipelineThread(
 
         // The emitted samples cover [accumStart, accumStart + duration);
         // whatever is still buffered starts where this output ended.
+        // Keep advancing the accumulator's logical start time during
+        // warm-up too — that way the first sample we actually deliver
+        // has a timestamp matching real wall-clock, and the writer's
+        // audio baseline rebase puts it at t≈0 in the output.
         rnnoiseAccumStartTime100ns += duration100ns;
 
-        writer->WriteSample(outSample.get());
+        if (audioWarmUpDone.load(std::memory_order_acquire))
+        {
+            writer->WriteSample(outSample.get());
+        }
     };
 
     if (!audioEndpoint.empty())
@@ -335,12 +361,25 @@ void PipelineThread(
         writer = std::make_unique<ScreenMediaSinkWriter>(encodingContext);
     }
 
-    writer->Begin();
-
+    // Pre-roll the audio capture so the system AGC has time to
+    // converge on the user's voice level. Samples that arrive during
+    // this window flow through RNNoise (so its filter state warms up
+    // in lockstep with the audio it's about to suppress), but the
+    // gated WriteSample call in audioCallback drops them on the
+    // floor. Once warm-up elapses we Begin the writer and flip the
+    // flag — the next audio packet is the first one that lands in
+    // the encoded file, and it lands at full AGC gain.
     if (audioCapture)
     {
         audioCapture->Start();
+        std::this_thread::sleep_for(kAudioWarmUpDuration);
     }
+
+    writer->Begin();
+    // Release-store pairs with the acquire-load in audioCallback so
+    // the callback thread sees the writer's post-Begin state before
+    // it sees the flag flip.
+    audioWarmUpDone.store(true, std::memory_order_release);
 
     // Enable away mode and prevent display and system idle timeouts
     (void)SetThreadExecutionState(ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED | ES_AWAYMODE_REQUIRED | ES_CONTINUOUS);
