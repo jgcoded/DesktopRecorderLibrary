@@ -294,8 +294,13 @@ void PipelineThread(
             context->Flush();
 
 #if _DEBUG
-            auto debug = device.as<ID3D11Debug>();
-            debug->ReportLiveDeviceObjects(D3D11_RLDO_DETAIL);
+            // Only available when the Graphics Tools optional Windows
+            // feature is installed and DxResource succeeded in creating
+            // a debug-layer device; otherwise the QI returns null.
+            if (auto debug = device.try_as<ID3D11Debug>())
+            {
+                debug->ReportLiveDeviceObjects(D3D11_RLDO_DETAIL);
+            }
 #endif
         }
     }
