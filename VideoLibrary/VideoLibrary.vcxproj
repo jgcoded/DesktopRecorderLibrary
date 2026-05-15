@@ -169,6 +169,7 @@
     <ClInclude Include="KeyedMutexLock.h" />
     <ClInclude Include="ScreenMediaSinkWriter.h" />
     <ClInclude Include="AsyncMediaSourceReader.h" />
+    <ClInclude Include="CommunicationsAudioCapture.h" />
     <ClInclude Include="SourceState.h" />
     <ClInclude Include="TexturePool.h" />
     <ClInclude Include="TextureToMediaSampleStep.h" />
@@ -193,6 +194,7 @@
     <ClCompile Include="RenderPointerTextureStep.cpp" />
     <ClCompile Include="ScreenMediaSinkWriter.cpp" />
     <ClCompile Include="AsyncMediaSourceReader.cpp" />
+    <ClCompile Include="CommunicationsAudioCapture.cpp" />
     <ClCompile Include="SharedSurface.cpp" />
     <ClCompile Include="TexturePool.cpp" />
     <ClCompile Include="TextureToMediaSampleStep.cpp" />

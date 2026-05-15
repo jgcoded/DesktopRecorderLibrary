@@ -34,24 +34,6 @@ using namespace Windows::Data::Json;
 
 using namespace std;
 
-winrt::com_ptr<IMFMediaType> GetMediaTypeFromMediaSource(winrt::com_ptr<IMFMediaSource> source)
-{
-    winrt::com_ptr<IMFPresentationDescriptor> videoDesc;
-    source->CreatePresentationDescriptor(videoDesc.put());
-
-    BOOL isSelected = false;
-    winrt::com_ptr<IMFStreamDescriptor> videoStreamDescriptor;
-    videoDesc->GetStreamDescriptorByIndex(0, &isSelected, videoStreamDescriptor.put());
-
-    winrt::com_ptr<IMFMediaTypeHandler> videoMediaTypeHandler;
-    videoStreamDescriptor->GetMediaTypeHandler(videoMediaTypeHandler.put());
-
-    winrt::com_ptr<IMFMediaType> videoMediaType;
-    videoMediaTypeHandler->GetMediaTypeByIndex(0, videoMediaType.put());
-
-    return videoMediaType;
-}
-
 winrt::com_ptr<IMFMediaType> GetMediaType(RECT virtualDesktopBounds)
 {
     // create media type
@@ -169,13 +151,31 @@ void PipelineThread(
 
     auto virtualDesktop = std::make_shared<VirtualDesktop>();
     com_ptr<IMFMediaType> videoMediaType = GetMediaType(virtualDesktop->VirtualDesktopBounds());
-    com_ptr<IMFMediaSource> audioMediaSource;
     com_ptr<IMFMediaType> audioMediaType;
+
+    std::unique_ptr<ScreenMediaSinkWriter> writer;
+    std::unique_ptr<CommunicationsAudioCapture> audioCapture;
+
+    auto audioCallback = [&writer, &stop](IMFSample* sample, HRESULT hr)
+    {
+        if (sample == nullptr || FAILED(hr))
+        {
+            stop->store(true);
+            return;
+        }
+        sample->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Audio);
+        writer->WriteSample(sample);
+    };
 
     if (!audioEndpoint.empty())
     {
-        audioMediaSource = AudioMedia::GetAudioMediaSourceFromEndpoint(std::wstring{ audioEndpoint });
-        audioMediaType = GetMediaTypeFromMediaSource(audioMediaSource);
+        // CommunicationsAudioCapture opens the mic in
+        // AudioCategory_Communications, which routes through the system's
+        // voice DSP (AEC/NS/AGC). Replaces the prior MFCreateDeviceSource
+        // path that gave the unfiltered "warbly" sound.
+        audioCapture = std::make_unique<CommunicationsAudioCapture>(
+            std::wstring{ audioEndpoint }, audioCallback);
+        audioMediaType = audioCapture->MediaType();
     }
 
     std::vector<DesktopMonitor> desktopMonitors = virtualDesktop->DesktopMonitors();
@@ -193,7 +193,6 @@ void PipelineThread(
         width,
         height
     );
-    std::unique_ptr<ScreenMediaSinkWriter> writer;
     {
         std::wstring fileNameW{ fileName };
         EncodingContext encodingContext{};
@@ -209,33 +208,11 @@ void PipelineThread(
         writer = std::make_unique<ScreenMediaSinkWriter>(encodingContext);
     }
 
-    winrt::com_ptr<AsyncMediaSourceReader> audioReader;
-
-    auto audioCallback = [&writer, &stop](IMFSample* sample, HRESULT hr)
-    {
-        if (sample == nullptr && FAILED(hr))
-        {
-            stop->store(true);
-        }
-
-        sample->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Audio);
-        writer->WriteSample(sample);
-    };
-
-    if (audioMediaSource)
-    {
-        audioReader.attach(new AsyncMediaSourceReader{
-            audioMediaSource,
-            audioCallback,
-            1000 / frameRate,
-            (DWORD)MF_SOURCE_READER_FIRST_AUDIO_STREAM });
-    }
-
     writer->Begin();
 
-    if (audioReader)
+    if (audioCapture)
     {
-        audioReader->Start();
+        audioCapture->Start();
     }
 
     // Enable away mode and prevent display and system idle timeouts
@@ -272,10 +249,10 @@ void PipelineThread(
 
     // clear resources
     {
-        if (audioReader)
+        if (audioCapture)
         {
-            audioReader->Stop();
-            audioReader = nullptr;
+            audioCapture->Stop();
+            audioCapture.reset();
         }
 
         writer->End();

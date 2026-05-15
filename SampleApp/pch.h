@@ -55,6 +55,7 @@
 #include "VideoLibrary\VirtualDesktop.h"
 #include "VideoLibrary\Pipeline.h"
 #include "VideoLibrary\AsyncMediaSourceReader.h"
+#include "VideoLibrary\CommunicationsAudioCapture.h"
 #include "VideoLibrary\ScreenMediaSinkWriter.h"
 #include "VideoLibrary\AudioMedia.h"
 #include "VideoLibrary\Errors.h"
