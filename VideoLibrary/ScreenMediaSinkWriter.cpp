@@ -68,10 +68,20 @@ ScreenMediaSinkWriter::ScreenMediaSinkWriter(const EncodingContext& encodingCont
 
     // create attributes
     winrt::check_hresult(MFCreateAttributes(mSinkWriterAttributes.put(), 4));
-    winrt::check_hresult(mSinkWriterAttributes->SetUINT32(MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, true));
+    // DIAGNOSTIC: forcing the software H.264 encoder while we investigate
+    // a persistent oversaturation that all our color-metadata fixes
+    // didn't address. Hardware H.264 MFTs (Intel QSV, NVENC, AMD VCN)
+    // are known to apply non-standard RGB->YUV conversions in some
+    // builds. If the software encoder produces correct colors, we'll
+    // either pick the encoder explicitly or push a workaround for the
+    // specific HW MFT in use. Revert to true once the matrix mismatch
+    // is understood.
+    winrt::check_hresult(mSinkWriterAttributes->SetUINT32(MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, false));
     winrt::check_hresult(mSinkWriterAttributes->SetUINT32(MF_LOW_LATENCY, true));
     winrt::check_hresult(mSinkWriterAttributes->SetUINT32(MF_SINK_WRITER_DISABLE_THROTTLING, true));
-    winrt::check_hresult(mSinkWriterAttributes->SetUnknown(MF_SINK_WRITER_D3D_MANAGER, mDeviceManager.get()));
+    // Don't pass the D3D manager either — that nudges MF to use the
+    // GPU encoder. Without it the sink writer goes through system memory.
+    // winrt::check_hresult(mSinkWriterAttributes->SetUnknown(MF_SINK_WRITER_D3D_MANAGER, mDeviceManager.get()));
 
     // create sink writer;
     winrt::check_hresult(MFCreateSinkWriterFromURL(
