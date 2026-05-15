@@ -115,6 +115,12 @@ void DesktopPointer::UpdateTexture(winrt::com_ptr<ID3D11Texture2D> const& newIma
 
 winrt::com_ptr<ID3D11Texture2D> DesktopPointer::Texture() const
 {
+    // PutBuffer marks the cache stale whenever DDA delivers a new shape;
+    // surface null to consumers so they regenerate the GPU texture.
+    if (mIsPointerTextureStale)
+    {
+        return nullptr;
+    }
     return mPointerTexture;
 }
 

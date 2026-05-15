@@ -33,6 +33,7 @@ Pipeline::Pipeline(
 )
     : mDuplicator{ duplicator }
     , mSharedSurface{ sharedSurface }
+    , mGpuVertexBufferCapacity{ 0 }
     , mVirtualDesktopBounds{ virtualDesktopBounds }
 {
     if (mDuplicator == nullptr)
@@ -108,6 +109,8 @@ void Pipeline::Perform()
                 frame,
                 mVirtualDesktopBounds,
                 mVertexBuffer,
+                mGpuVertexBuffer,
+                mGpuVertexBufferCapacity,
                 mShaderCache,
                 lock->TexturePtr(),
                 mRenderTargetView

@@ -31,6 +31,8 @@ public:
         std::shared_ptr<Frame> frame,
         RECT virtualDesktopBounds,
         std::shared_ptr<std::vector<Vertex>> vertexBuffer,
+        winrt::com_ptr<ID3D11Buffer>& gpuVertexBuffer,
+        UINT& gpuVertexBufferCapacity,
         std::shared_ptr<ShaderCache> shaderCache,
         ID3D11Texture2D* sharedSurfacePtr,
         winrt::com_ptr<ID3D11RenderTargetView> renderTargetView
@@ -41,7 +43,7 @@ public:
     virtual void Perform() override;
 
 private:
-    
+
     void UpdateDirtyRects();
 
     void RenderDirtyRects();
@@ -49,6 +51,9 @@ private:
     std::shared_ptr<Frame> mFrame;
     RECT mVirtualDesktopBounds;
     std::shared_ptr<std::vector<Vertex>> mVertexBuffer;
+    // Persistent GPU buffer owned by Pipeline; grown here on demand.
+    winrt::com_ptr<ID3D11Buffer>& mGpuVertexBuffer;
+    UINT& mGpuVertexBufferCapacity;
     std::shared_ptr<ShaderCache> mShaderCache;
     ID3D11Texture2D* mSharedSurfacePtr;
     winrt::com_ptr<ID3D11RenderTargetView> mRenderTargetView;

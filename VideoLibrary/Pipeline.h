@@ -52,6 +52,8 @@ private:
     std::shared_ptr<SharedSurface> mSharedSurface;
     std::shared_ptr<ShaderCache> mShaderCache;
     std::shared_ptr<std::vector<Vertex>> mVertexBuffer;
+    winrt::com_ptr<ID3D11Buffer> mGpuVertexBuffer;
+    UINT mGpuVertexBufferCapacity;
     winrt::com_ptr<TexturePool> mTexturePool;
     winrt::com_ptr<ID3D11Texture2D> mStagingTexture;
     winrt::com_ptr<IMFSample> mSample;

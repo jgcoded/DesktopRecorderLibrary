@@ -26,12 +26,16 @@ RenderDirtyRectsStep::RenderDirtyRectsStep(
     std::shared_ptr<Frame> frame,
     RECT virtualDesktopBounds,
     std::shared_ptr<std::vector<Vertex>> vertexBuffer,
+    winrt::com_ptr<ID3D11Buffer>& gpuVertexBuffer,
+    UINT& gpuVertexBufferCapacity,
     std::shared_ptr<ShaderCache> shaderCache,
     ID3D11Texture2D* sharedSurfacePtr,
     winrt::com_ptr<ID3D11RenderTargetView> renderTargetView)
     : mFrame{ frame }
     , mVirtualDesktopBounds{ virtualDesktopBounds }
     , mVertexBuffer{ vertexBuffer }
+    , mGpuVertexBuffer{ gpuVertexBuffer }
+    , mGpuVertexBufferCapacity{ gpuVertexBufferCapacity }
     , mShaderCache{ shaderCache }
     , mSharedSurfacePtr{ sharedSurfacePtr }
     , mRenderTargetView{ renderTargetView }
@@ -283,25 +287,38 @@ void RenderDirtyRectsStep::RenderDirtyRects()
     context->PSSetSamplers(0, 1, samplerPtr);
     context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-    D3D11_BUFFER_DESC bufferDesc;
-    bufferDesc.Usage = D3D11_USAGE_DEFAULT;
-    bufferDesc.ByteWidth = static_cast<UINT>(mVertexBuffer->size() * sizeof(Vertex));
-    bufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-    bufferDesc.CPUAccessFlags = 0;
-    bufferDesc.MiscFlags = 0;
-    bufferDesc.StructureByteStride = 0;
+    const UINT requiredBytes = static_cast<UINT>(mVertexBuffer->size() * sizeof(Vertex));
+    if (mGpuVertexBuffer == nullptr || mGpuVertexBufferCapacity < requiredBytes)
+    {
+        // Double-grow to absorb dirty-rect-count spikes without reallocating
+        // every frame the working set creeps up.
+        UINT newCapacity = mGpuVertexBufferCapacity == 0 ? requiredBytes : mGpuVertexBufferCapacity;
+        while (newCapacity < requiredBytes)
+        {
+            newCapacity *= 2;
+        }
 
-    D3D11_SUBRESOURCE_DATA bufferData;
-    bufferData.pSysMem = reinterpret_cast<const void*>(mVertexBuffer->data());
-    bufferData.SysMemPitch = 0;
-    bufferData.SysMemSlicePitch = 0;
+        D3D11_BUFFER_DESC bufferDesc{};
+        bufferDesc.Usage = D3D11_USAGE_DYNAMIC;
+        bufferDesc.ByteWidth = newCapacity;
+        bufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+        bufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+        bufferDesc.MiscFlags = 0;
+        bufferDesc.StructureByteStride = 0;
 
-    winrt::com_ptr<ID3D11Buffer> buffer;
-    winrt::check_hresult(device->CreateBuffer(&bufferDesc, &bufferData, buffer.put()));
+        mGpuVertexBuffer = nullptr;
+        winrt::check_hresult(device->CreateBuffer(&bufferDesc, nullptr, mGpuVertexBuffer.put()));
+        mGpuVertexBufferCapacity = newCapacity;
+    }
+
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    winrt::check_hresult(context->Map(mGpuVertexBuffer.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
+    memcpy(mapped.pData, mVertexBuffer->data(), requiredBytes);
+    context->Unmap(mGpuVertexBuffer.get(), 0);
 
     constexpr UINT stride = sizeof(Vertex);
     constexpr UINT offset = 0;
-    ID3D11Buffer* buf = buffer.get();
+    ID3D11Buffer* buf = mGpuVertexBuffer.get();
     ID3D11Buffer** bufAddr = &buf;
     context->IASetVertexBuffers(0, 1, bufAddr, &stride, &offset);
 

@@ -256,8 +256,17 @@ winrt::com_ptr<ID3D11Texture2D> RenderPointerTextureStep::MakePointerTexture()
 
 winrt::com_ptr<ID3D11Texture2D> RenderPointerTextureStep::MakeColorPointerTexture()
 {
+    // Color cursors depend only on the source pixel buffer; cache across
+    // frames until the shape changes. Masked/monochrome variants composite
+    // against the desktop pixels under the cursor and cannot be cached.
+    if (auto cached = mDesktopPointer->Texture())
+    {
+        return cached;
+    }
     auto shapeInfo = mDesktopPointer->ShapeInfo();
-    return MakeColorPointer(mDesktopPointer->PutBuffer(), shapeInfo.Width, shapeInfo.Height);
+    auto texture = MakeColorPointer(mDesktopPointer->PutBuffer(), shapeInfo.Width, shapeInfo.Height);
+    mDesktopPointer->UpdateTexture(texture);
+    return texture;
 }
 
 winrt::com_ptr<ID3D11Texture2D> RenderPointerTextureStep::MakeMaskedPointerTexture()
