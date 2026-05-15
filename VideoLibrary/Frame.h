@@ -29,6 +29,11 @@ public:
 
     winrt::com_ptr<ID3D11Texture2D> DesktopImage() const;
 
+    // The DXGI format DDA delivered this frame in. Can change mid-
+    // recording when HDR is enabled (BGRA8 when the visible desktop
+    // fits SDR, R16G16B16A16_FLOAT when any HDR content is on screen).
+    DXGI_FORMAT Format() const { return mFormat; }
+
     RECT DesktopMonitorBounds() const;
 
     int64_t PresentationTime() const;
@@ -48,6 +53,7 @@ public:
 private:
     RECT mDesktopMonitorBounds;
     winrt::com_ptr<ID3D11Texture2D> mFrameTexture;
+    DXGI_FORMAT mFormat;
     DXGI_OUTDUPL_FRAME_INFO mFrameInfo;
     winrt::com_ptr<IDXGIOutputDuplication> mDupl;
     std::shared_ptr<std::vector<byte>> mRectBuffer;

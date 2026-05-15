@@ -31,6 +31,7 @@ Frame::Frame(ScreenDuplicator& duplicator)
     , mMoveRects{ nullptr }
     , mDirtyRects{ nullptr }
     , mDesktopMonitorBounds{ }
+    , mFormat{ DXGI_FORMAT_UNKNOWN }
     , mRotation{ DXGI_MODE_ROTATION_UNSPECIFIED }
 {
     try
@@ -48,15 +49,15 @@ Frame::Frame(ScreenDuplicator& duplicator)
         mCaptured = true;
         mFrameTexture = desktopImageResource.as<ID3D11Texture2D>();
 
-        // Diagnostic: surface the DXGI format DDA is actually delivering.
-        // Combined with the ColorSpace= line from ScreenDuplicator this
-        // tells us whether the framebuffer is BGRA8 (sRGB / tone-mapped),
-        // R10G10B10A2 (HDR10 PQ), or R16G16B16A16 FLOAT (scRGB linear).
-        // We can only pick the right conversion once we know both.
+        // Capture the DXGI format so Pipeline can pick a per-frame
+        // color conversion. DDA flips between BGRA8 and FP16 when HDR
+        // is enabled depending on whether any HDR content is on screen.
         {
-            static DXGI_FORMAT lastFormat = DXGI_FORMAT_UNKNOWN;
             D3D11_TEXTURE2D_DESC td{};
             mFrameTexture->GetDesc(&td);
+            mFormat = td.Format;
+
+            static DXGI_FORMAT lastFormat = DXGI_FORMAT_UNKNOWN;
             if (td.Format != lastFormat)
             {
                 lastFormat = td.Format;

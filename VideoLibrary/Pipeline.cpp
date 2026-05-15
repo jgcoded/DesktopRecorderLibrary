@@ -110,15 +110,31 @@ void Pipeline::Perform()
 
             renderMoves.Perform();
 
-            // Conversion temporarily disabled while we collect actual
-            // ColorSpace + texture-format values from the user's HDR
-            // setup. The previous mapping (HDR10 -> mode 2 PQ decode)
-            // made the picture worse than the SDR-tagged baseline on the
-            // user's machine, which means the shader's assumption about
-            // PQ-encoded input doesn't hold for their DDA delivery
-            // format. Once we know what DDA actually hands us we'll
-            // reinstate the correct branch.
+            // Pick the conversion based on the per-frame texture format,
+            // not the monitor's reported color space — DDA can flip
+            // between BGRA8 (already tone-mapped to sRGB-ish) and FP16
+            // (scRGB linear Rec.709) within a single HDR-on recording.
+            // R10G10B10A2 would be HDR10 PQ; not seen on this hardware
+            // so far but we handle it for completeness.
             ColorSpaceCBData csParams{ ColorSpaceCBData::None, 100.0f, 0.0f, 0.0f };
+            switch (frame->Format())
+            {
+            case DXGI_FORMAT_R16G16B16A16_FLOAT:
+                csParams.conversionMode = ColorSpaceCBData::ScRgbLinearToSrgb;
+                break;
+            case DXGI_FORMAT_R10G10B10A2_UNORM:
+                if (mDuplicator->ColorSpace() == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020
+                    || mDuplicator->ColorSpace() == DXGI_COLOR_SPACE_RGB_STUDIO_G2084_NONE_P2020)
+                {
+                    csParams.conversionMode = ColorSpaceCBData::Hdr10PqToSrgb;
+                }
+                break;
+            default:
+                // BGRA8 (and anything else) passes through. For BGRA8 in
+                // HDR-on mode DDA has already mapped to a sRGB-ish 8-bit
+                // surface; passthrough produces correct colors.
+                break;
+            }
 
             RenderDirtyRectsStep renderDirty{
                 frame,
