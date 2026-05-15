@@ -85,18 +85,39 @@ void Pipeline::Perform()
     // new content), its KeyedMutexLock short-circuits the rotate so
     // subsequent contributors stay in step.
     //
-    // Pick the first non-null frame's present time as the master clock
-    // for this iteration. Different monitors may report slightly
-    // different QPC values for "the same" frame; for the encoded
-    // timeline we just need one consistent source.
+    // Pick the first frame that reports a real GPU present time as the
+    // master clock. DDA's LastPresentTime is 0 when the desktop wasn't
+    // updated since the last AcquireNextFrame, so we can't use a value
+    // of 0 as a "not set" sentinel — track presence explicitly.
     int64_t framePresentationTimeQpc = 0;
+    bool framePresentationTimeSet = false;
     for (auto& contributor : mContributors)
     {
         auto frame = contributor.Contribute();
-        if (frame && frame->Captured() && framePresentationTimeQpc == 0)
+        if (frame && frame->Captured() && !framePresentationTimeSet)
         {
-            framePresentationTimeQpc = frame->PresentationTime();
+            int64_t presentTime = frame->PresentationTime();
+            if (presentTime > 0)
+            {
+                framePresentationTimeQpc = presentTime;
+                framePresentationTimeSet = true;
+            }
         }
+    }
+
+    // If no contributor reported a real GPU present time, fall back to
+    // the current QPC so every emitted sample still carries a tagged
+    // timestamp on a single clock. Without this, early frames would
+    // reach the sink writer un-stamped and pick up wall-clock times,
+    // and later frames would switch to the GPU clock once a non-zero
+    // present time arrived — a clock cross that can break the
+    // monotonicity the encoder relies on for A/V sync.
+    if (!framePresentationTimeSet)
+    {
+        LARGE_INTEGER now;
+        QueryPerformanceCounter(&now);
+        framePresentationTimeQpc = now.QuadPart;
+        framePresentationTimeSet = true;
     }
 
     // Master-device steps: pointer composite + sample wrap. Both run
@@ -106,15 +127,13 @@ void Pipeline::Perform()
     auto masterDevice = mSharedSurface->Device();
     DxMultithread multithread{ masterDevice.as<ID3D10Multithread>() };
 
-    RECT lastMonitorBounds{};  // unused in current pointer step but the API takes it
     RenderPointerTextureStep renderPointer{
         mDesktopPointer,
         mSharedSurface,
         masterDevice,
         mShaderCache,
         mTexturePool,
-        mVirtualDesktopBounds,
-        lastMonitorBounds
+        mVirtualDesktopBounds
     };
     renderPointer.Perform();
 
@@ -134,7 +153,7 @@ void Pipeline::Perform()
     // Tag the sample with the GPU present time of the captured frame
     // so the sink writer's encoded timeline is frame-accurate (and so
     // dropped frames don't compress the timeline).
-    if (mSample && framePresentationTimeQpc > 0 && mQpcFrequency.QuadPart > 0)
+    if (mSample && framePresentationTimeSet && mQpcFrequency.QuadPart > 0)
     {
         if (!mPresentationTimeBaselineSet)
         {

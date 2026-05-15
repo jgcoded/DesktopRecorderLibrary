@@ -20,18 +20,14 @@
 #include "pch.h"
 #include "RnnoiseFilter.h"
 
+#include <cassert>
+
 extern "C" {
 #include "third_party/rnnoise/include/rnnoise.h"
 }
 
 namespace
 {
-    // RNNoise is hard-coded to 480-sample 48 kHz frames. We assert
-    // against this at runtime via rnnoise_get_frame_size() rather
-    // than baking it in — cheap insurance if the upstream constant
-    // ever changes.
-    constexpr size_t kRnnoiseFrameSize = 480;
-
     // RNNoise expects int16-scale floats (-32768..32767), not the
     // -1..1 range WASAPI delivers. The CELT_SIG_SCALE constant is
     // 32768 in upstream; mirroring it here so the audio path is
@@ -46,8 +42,8 @@ RnnoiseFilter::RnnoiseFilter()
     {
         throw std::bad_alloc{};
     }
-    mInputAccum.reserve(kRnnoiseFrameSize);
-    mFrameScratch.resize(kRnnoiseFrameSize);
+    mInputAccum.reserve(kFrameSize);
+    mFrameScratch.resize(kFrameSize);
 }
 
 RnnoiseFilter::~RnnoiseFilter()
@@ -59,14 +55,17 @@ RnnoiseFilter::~RnnoiseFilter()
     }
 }
 
-size_t RnnoiseFilter::Process(const float* in, size_t frameCount, float* out)
+size_t RnnoiseFilter::Process(const float* in, size_t frameCount, float* out, size_t outCapacity)
 {
+    assert(outCapacity >= MaxOutputFor(frameCount));
+    (void)outCapacity;
+
     size_t outWritten = 0;
     size_t inIndex = 0;
 
     while (inIndex < frameCount)
     {
-        const size_t need = kRnnoiseFrameSize - mInputAccum.size();
+        const size_t need = kFrameSize - mInputAccum.size();
         const size_t take = (frameCount - inIndex) < need ? (frameCount - inIndex) : need;
 
         for (size_t i = 0; i < take; ++i)
@@ -75,22 +74,22 @@ size_t RnnoiseFilter::Process(const float* in, size_t frameCount, float* out)
         }
         inIndex += take;
 
-        if (mInputAccum.size() < kRnnoiseFrameSize)
+        if (mInputAccum.size() < kFrameSize)
         {
             break;
         }
 
         // rnnoise_process_frame can read and write the same buffer,
         // but we hold scratch separate so the caller's output buffer
-        // can be smaller than 480 mid-call without aliasing concerns.
+        // can be smaller than kFrameSize mid-call without aliasing concerns.
         rnnoise_process_frame(mState, mFrameScratch.data(), mInputAccum.data());
         mInputAccum.clear();
 
-        for (size_t i = 0; i < kRnnoiseFrameSize; ++i)
+        for (size_t i = 0; i < kFrameSize; ++i)
         {
             out[outWritten + i] = mFrameScratch[i] / kInt16Scale;
         }
-        outWritten += kRnnoiseFrameSize;
+        outWritten += kFrameSize;
     }
 
     return outWritten;
@@ -105,12 +104,12 @@ size_t RnnoiseFilter::Flush(float* out)
     // Pad with zeros to a full frame so the model sees the same shape
     // it always does. The tail is short enough (<10 ms) that the model
     // attack on the zero-pad is inaudible.
-    mInputAccum.resize(kRnnoiseFrameSize, 0.0f);
+    mInputAccum.resize(kFrameSize, 0.0f);
     rnnoise_process_frame(mState, mFrameScratch.data(), mInputAccum.data());
     mInputAccum.clear();
-    for (size_t i = 0; i < kRnnoiseFrameSize; ++i)
+    for (size_t i = 0; i < kFrameSize; ++i)
     {
         out[i] = mFrameScratch[i] / kInt16Scale;
     }
-    return kRnnoiseFrameSize;
+    return kFrameSize;
 }

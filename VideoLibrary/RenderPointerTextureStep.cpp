@@ -31,15 +31,13 @@ RenderPointerTextureStep::RenderPointerTextureStep(
     winrt::com_ptr<ID3D11Device> device,
     std::shared_ptr<ShaderCache> shaderCache,
     winrt::com_ptr<TexturePool> texturePool,
-    RECT virtualDesktopBounds,
-    RECT desktopMonitorBounds)
+    RECT virtualDesktopBounds)
     : mDevice{ device }
     , mSharedSurface{ sharedSurface }
     , mDesktopPointer{ desktopPointer }
     , mShaderCache{ shaderCache }
     , mTexturePool{ texturePool }
     , mVirtualDesktopBounds{ virtualDesktopBounds }
-    , mDesktopMonitorBounds{ desktopMonitorBounds }
     , mResult{ nullptr }
 {
     if (mDesktopPointer == nullptr)

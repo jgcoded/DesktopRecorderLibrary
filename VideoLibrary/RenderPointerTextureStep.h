@@ -32,8 +32,7 @@ public:
         winrt::com_ptr<ID3D11Device> device,
         std::shared_ptr<ShaderCache> shaderCache,
         winrt::com_ptr<TexturePool> texturePool,
-        RECT virtualDesktopBounds,
-        RECT desktopMonitorBounds);
+        RECT virtualDesktopBounds);
 
     ~RenderPointerTextureStep();
 
@@ -61,5 +60,4 @@ private:
     winrt::com_ptr<ID3D11Texture2D> mResult;
 
     RECT mVirtualDesktopBounds;
-    RECT mDesktopMonitorBounds;
 };

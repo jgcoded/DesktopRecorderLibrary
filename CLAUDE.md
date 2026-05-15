@@ -36,15 +36,23 @@ Lifetime ordering matters: `ScreenMediaSinkWriter::End()` must run before the du
 
 ### The recording pipeline (`Pipeline::Perform`)
 
-All concrete frame work is implemented as subclasses of `RecordingStep` (a `Perform()`-only abstract base). `Pipeline` composes them per frame:
+The pipeline is two-tier — per-monitor work runs in a `MonitorContributor`, then master-device work runs once at the end. There is no shared `RecordingStep` base class; the step classes are plain concrete types composed by their owners.
 
-1. `CaptureFrameStep` — calls `AcquireNextFrame`, returns a `Frame` carrying desktop image + move/dirty rects + monitor bounds.
-2. `RenderMoveRectsStep` — copies regions of the previous frame to a staging texture to apply scroll-style move rects.
-3. `RenderDirtyRectsStep` — uploads `Vertex` quads for each dirty rect and runs `VertexShader.hlsl` / `PixelShader.hlsl` via `ShaderCache` to blit them into the `SharedSurface`.
-4. `RenderPointerTextureStep` — composites the cursor (color or monochrome / masked) onto a pool-allocated texture sized to the virtual desktop, accounting for monitor rotation.
-5. `TextureToMediaSampleStep` — wraps the composed texture as an `IMFSample` for the sink writer.
+Per-monitor work, one `MonitorContributor` per duplicator (`MonitorContributor::Contribute`):
 
-`TexturePool` recycles intermediate textures; `ShaderCache` lazily compiles/binds shaders so the per-frame path stays allocation-light.
+1. Acquire the shared surface's keyed-mutex lock on this contributor's device.
+2. `CaptureFrameStep` — calls `AcquireNextFrame`, returns a `Frame` carrying desktop image + move/dirty rects + monitor bounds.
+3. `RenderMoveRectsStep` — copies regions of the previous frame to a staging texture to apply scroll-style move rects.
+4. `RenderDirtyRectsStep` — uploads `Vertex` quads for each dirty rect and runs `VertexShader.hlsl` / `PixelShader.hlsl` via `ShaderCache` (color-space conversion is selected per-frame from the duplicator's reported format) to blit them into this monitor's region of the `SharedSurface`.
+5. Release the keyed-mutex lock so the next contributor (or master) can take it.
+
+Master-device work, run once after all contributors (`Pipeline::Perform`):
+
+1. `RenderPointerTextureStep` — composites the cursor (color or monochrome / masked) from the shared surface into a pool-allocated texture sized to the virtual desktop, accounting for monitor rotation.
+2. `TextureToMediaSampleStep` — wraps the composed texture as an `IMFSample` for the sink writer.
+3. Tag the sample with a QPC-derived presentation time (preferring DDA's `LastPresentTime` when non-zero, else the current `QueryPerformanceCounter` snapshot) so the encoded timeline stays on a single monotonic clock.
+
+`TexturePool` recycles intermediate textures and caches per-texture `ID3D11RenderTargetView`s; `ShaderCache` lazily compiles/binds shaders and the color-space constant buffer so the per-frame path stays allocation-light.
 
 ### Cross-device safety
 
@@ -52,7 +60,11 @@ The duplicator's device and the sink writer's device are distinct. Anywhere D3D 
 
 ### Audio path
 
-Audio is independent of the video pipeline: `AudioMedia::GetAudioMediaSourceFromEndpoint` produces an `IMFMediaSource`, and `AsyncMediaSourceReader` drives it asynchronously. Samples arrive via a callback that calls `ScreenMediaSinkWriter::WriteSample` with `MF_MT_MAJOR_TYPE = MFMediaType_Audio`. Video samples take the same path but with `MFMediaType_Video` — the sink writer dispatches by major type, so callers must set it before calling `WriteSample`.
+Audio is independent of the video pipeline. `CommunicationsAudioCapture` opens the mic via WASAPI in `AudioCategory_Communications` — that's what engages the system voice-DSP chain (AEC/NS/AGC) the way Teams/Discord do; the legacy `MFCreateDeviceSource` path (still in `AudioMedia` for reference) bypasses all of it. The capture thread emits one `IMFSample` per WASAPI packet via a callback.
+
+On top of that, when the captured format is 48 kHz mono FP32 (the established Communications-mode default), samples flow through `RnnoiseFilter` for DNN noise suppression (Xiph RNNoise vendored under `VideoLibrary/third_party/rnnoise/`). The filter buffers into 480-sample frames internally, so output count can exceed input count when the accumulator was non-empty — callers must size their output buffer using `RnnoiseFilter::MaxOutputFor(inFrameCount)`. Sample timestamps are derived from a buffered accumulator's leading-edge time so the encoded timeline stays sample-accurate across the 480-sample frame boundary.
+
+Samples (audio or video) reach the sink via `ScreenMediaSinkWriter::WriteSample`. The writer dispatches by `MF_MT_MAJOR_TYPE`, so callers must set it (`MFMediaType_Audio` or `MFMediaType_Video`) before calling.
 
 ### Recoverable errors
 

@@ -220,15 +220,23 @@ void PipelineThread(
             rnnoiseAccumStartSet = true;
         }
 
+        // Output must accommodate the worst case where the filter's
+        // internal accumulator already held kFrameSize-1 samples and
+        // this packet completes a full output frame on top of its
+        // entire input — i.e. up to inFrames + (kFrameSize - 1)
+        // samples. Sizing the buffer exactly to inFrames was a
+        // heap overflow whenever the accumulator was non-empty.
+        const size_t outCapacityFrames = RnnoiseFilter::MaxOutputFor(inFrames);
         winrt::com_ptr<IMFMediaBuffer> outBuffer;
-        winrt::check_hresult(MFCreateMemoryBuffer(static_cast<DWORD>(inFrames * sizeof(float)), outBuffer.put()));
+        winrt::check_hresult(MFCreateMemoryBuffer(static_cast<DWORD>(outCapacityFrames * sizeof(float)), outBuffer.put()));
 
         BYTE* outData = nullptr;
         winrt::check_hresult(outBuffer->Lock(&outData, nullptr, nullptr));
         const size_t outFrames = rnnoise->Process(
             reinterpret_cast<const float*>(inData),
             inFrames,
-            reinterpret_cast<float*>(outData));
+            reinterpret_cast<float*>(outData),
+            outCapacityFrames);
         winrt::check_hresult(outBuffer->Unlock());
         winrt::check_hresult(inBuffer->Unlock());
 
