@@ -97,9 +97,31 @@ ScreenMediaSinkWriter::ScreenMediaSinkWriter(const EncodingContext& encodingCont
     winrt::check_hresult(MFSetAttributeSize(mVideoOutputMediaType.get(), MF_MT_FRAME_SIZE, width, height));
     winrt::check_hresult(MFSetAttributeRatio(mVideoOutputMediaType.get(), MF_MT_FRAME_RATE, frameRate.Numerator(), frameRate.Denominator()));
     winrt::check_hresult(mSinkWriter->AddStream(mVideoOutputMediaType.get(), &mVideoStreamIndex));
-    
+
     // set video input media type
     winrt::check_hresult(mSinkWriter->SetInputMediaType(mVideoStreamIndex, mVideoInputMediaType.get(), nullptr));
+
+    // The H.264 encoder MFT doesn't reliably honor MF_MT_VIDEO_NOMINAL_RANGE
+    // on the media type — it ignores the attribute on some builds and emits
+    // a limited-range stream tag regardless. Force it through ICodecAPI,
+    // which writes the range bit directly into the bitstream's VUI. Both
+    // input and output need to be set or the encoder's internal color
+    // converter still scales 0..255 down into 16..235.
+    {
+        winrt::com_ptr<ICodecAPI> codec;
+        HRESULT codecHr = mSinkWriter->GetServiceForStream(
+            mVideoStreamIndex, GUID_NULL, IID_PPV_ARGS(codec.put()));
+        if (SUCCEEDED(codecHr) && codec)
+        {
+            VARIANT range;
+            VariantInit(&range);
+            range.vt = VT_UI4;
+            range.ulVal = eAVEncVideoColorNominalRange_0_255;
+            (void)codec->SetValue(&CODECAPI_AVEncVideoInputColorNominalRange, &range);
+            (void)codec->SetValue(&CODECAPI_AVEncVideoOutputColorNominalRange, &range);
+            VariantClear(&range);
+        }
+    }
 
     if (!mAudioInputMediaType)
     {

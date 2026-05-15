@@ -18,6 +18,7 @@
 */
 
 #include "pch.h"
+#include <sstream>
 #include "CommunicationsAudioCapture.h"
 
 namespace
@@ -60,19 +61,32 @@ CommunicationsAudioCapture::CommunicationsAudioCapture(
     winrt::check_hresult(mAudioClient->SetClientProperties(&props));
 
     // GetMixFormat reflects what the engine will deliver *after* the
-    // Communications APOs run, so MFInitMediaTypeFromWaveFormatEx on it
-    // yields the format the encoder should expect.
+    // Communications APOs run. If the system honored the category, this
+    // typically drops to mono / 16 kHz; if it stayed at the device's
+    // default (e.g. 48 kHz stereo float) the APO chain probably didn't
+    // engage and the recorded audio will sound like the raw mic.
     winrt::check_hresult(mAudioClient->GetMixFormat(&mWaveFormat));
+
+    // Diagnostic: surface the post-Communications format so the user can
+    // confirm DSP engagement without reaching for an external tool.
+    {
+        std::wstringstream ss;
+        ss << L"CommunicationsAudioCapture mix format: "
+           << mWaveFormat->nSamplesPerSec << L" Hz, "
+           << mWaveFormat->nChannels << L" ch, "
+           << mWaveFormat->wBitsPerSample << L" bits, tag=0x"
+           << std::hex << mWaveFormat->wFormatTag << L"\n";
+        OutputDebugStringW(ss.str().c_str());
+    }
 
     mAudioReadyEvent = CreateEventEx(nullptr, nullptr, 0, EVENT_MODIFY_STATE | SYNCHRONIZE);
     winrt::check_pointer(mAudioReadyEvent);
 
-    // AUTOCONVERTPCM + SRC_DEFAULT_QUALITY lets the engine convert
-    // between the device's native format and the mix format if needed,
-    // so we don't have to do format negotiation here.
-    DWORD streamFlags = AUDCLNT_STREAMFLAGS_EVENTCALLBACK
-        | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM
-        | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY;
+    // No AUTOCONVERTPCM: we Initialize with exactly the engine's mix
+    // format, so no resampler is needed. The earlier AUTOCONVERTPCM flag
+    // can push the stream through a converter chain that bypasses parts
+    // of the APO graph.
+    DWORD streamFlags = AUDCLNT_STREAMFLAGS_EVENTCALLBACK;
 
     winrt::check_hresult(mAudioClient->Initialize(
         AUDCLNT_SHAREMODE_SHARED, streamFlags,
