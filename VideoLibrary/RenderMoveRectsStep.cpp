@@ -110,7 +110,9 @@ void RenderMoveRectsStep::Perform()
             break;
 
         case DXGI_MODE_ROTATION_ROTATE270:
-            srcRect.left = moveRect.SourcePoint.x;
+            // srcRect.left was reading SourcePoint.x; the 270 mapping mirrors
+            // the 90 case (which uses SourcePoint.y for the rotated axis).
+            srcRect.left = moveRect.SourcePoint.y;
             srcRect.top = desktopWidth - (moveRect.SourcePoint.x + moveRect.DestinationRect.right - moveRect.DestinationRect.left);
             srcRect.right = moveRect.SourcePoint.y + moveRect.DestinationRect.bottom - moveRect.DestinationRect.top;
             srcRect.bottom = desktopWidth - moveRect.SourcePoint.x;

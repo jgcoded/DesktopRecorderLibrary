@@ -92,23 +92,46 @@ void RenderPointerTextureStep::Perform()
     D3D11_TEXTURE2D_DESC desc;
     virtualDesktopCopy->GetDesc(&desc);
 
-    if (pos.x < 0) {
-        shape.Width += pos.x;
-        pos.x = 0;
-    }
-    else if (pos.x + shape.Width > desc.Width) {
-        shape.Width = desc.Width - pos.x;
-    }
+    // Monochrome pointers pack AND/XOR masks vertically; the rendered
+    // height is the top half only.
     if (shape.Type == DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MONOCHROME) {
         shape.Height /= 2;
     }
+
+    // Source-data offset into the cursor image when it hangs off the
+    // top/left edges. MakeColorPointerTexture uploads the full untrimmed
+    // cursor, so the visible portion must be selected with texcoords
+    // below. MakeMaskedPointerTexture already trims its output to the
+    // visible size, so its texcoords stay at the full 0..1 range.
+    const UINT fullWidth = shape.Width;
+    const UINT fullHeight = shape.Height;
+    UINT offsetX = 0, offsetY = 0;
+
+    if (pos.x < 0) {
+        offsetX = static_cast<UINT>(-pos.x);
+        shape.Width = (shape.Width > offsetX) ? shape.Width - offsetX : 0;
+        pos.x = 0;
+    }
+    else if (pos.x + static_cast<int>(shape.Width) > static_cast<int>(desc.Width)) {
+        shape.Width = desc.Width - pos.x;
+    }
     if (pos.y < 0) {
-        shape.Height += pos.y;
+        offsetY = static_cast<UINT>(-pos.y);
+        shape.Height = (shape.Height > offsetY) ? shape.Height - offsetY : 0;
         pos.y = 0;
     }
-    else if (pos.y + shape.Height > desc.Height) {
+    else if (pos.y + static_cast<int>(shape.Height) > static_cast<int>(desc.Height)) {
         shape.Height = desc.Height - pos.y;
     }
+
+    float texU0 = 0.0f, texV0 = 0.0f, texU1 = 1.0f, texV1 = 1.0f;
+    if (shape.Type == DXGI_OUTDUPL_POINTER_SHAPE_TYPE_COLOR && fullWidth > 0 && fullHeight > 0) {
+        texU0 = static_cast<float>(offsetX) / static_cast<float>(fullWidth);
+        texV0 = static_cast<float>(offsetY) / static_cast<float>(fullHeight);
+        texU1 = static_cast<float>(offsetX + shape.Width) / static_cast<float>(fullWidth);
+        texV1 = static_cast<float>(offsetY + shape.Height) / static_cast<float>(fullHeight);
+    }
+
     float centerX = (float)desc.Width / 2;
     float centerY = (float)desc.Height / 2;
     float left = ((float)pos.x - centerX) / centerX;
@@ -119,12 +142,12 @@ void RenderPointerTextureStep::Perform()
     // Vertices for drawing whole texture
     // vertex coords are clock wise per triangle, texture coords are ccw
     const std::vector<Vertex> vertices = {
-        { { left, bottom, 0 },{ 0.0f, 1.0f } },
-        { { left, top, 0 },{ 0.0f, 0.0f } },
-        { { right, bottom, 0 },{ 1.0f, 1.0f } },
-        { { right, bottom, 0 },{ 1.0f, 1.0f } },
-        { { left, top, 0 },{ 0.0f, 0.0f } },
-        { { right, top, 0 },{ 1.0f, 0.0f } },
+        { { left, bottom, 0 },{ texU0, texV1 } },
+        { { left, top, 0 },{ texU0, texV0 } },
+        { { right, bottom, 0 },{ texU1, texV1 } },
+        { { right, bottom, 0 },{ texU1, texV1 } },
+        { { left, top, 0 },{ texU0, texV0 } },
+        { { right, top, 0 },{ texU1, texV0 } },
     };
 
     winrt::com_ptr<ID3D11Texture2D> mouseTexture = this->MakePointerTexture();
@@ -256,9 +279,9 @@ winrt::com_ptr<ID3D11Texture2D> RenderPointerTextureStep::MakeMaskedPointerTextu
     UINT maskX = 0, maskY = 0;
 
     if (left < 0) {
-        left = 0;
-        maskX = -left;
+        maskX = static_cast<UINT>(-left);
         width += left;
+        left = 0;
     }
     else if (left + width >(int)desc.Width) {
         width = desc.Width - left;
@@ -269,9 +292,9 @@ winrt::com_ptr<ID3D11Texture2D> RenderPointerTextureStep::MakeMaskedPointerTextu
     }
 
     if (top < 0) {
-        top = 0;
-        maskY = -top;
+        maskY = static_cast<UINT>(-top);
         height += top;
+        top = 0;
     }
     else if (top + height >(int)desc.Height) {
         height = desc.Height - top;
