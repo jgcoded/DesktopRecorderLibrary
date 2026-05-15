@@ -90,11 +90,17 @@ float4 main(PS_INPUT input) : SV_Target
 
     if (conversionMode == 1)
     {
-        // scRGB: already Rec.709 primaries; values >1 are HDR highlights,
-        // values <0 are out-of-gamut. Tone-map highlights instead of hard
-        // clamping so the loss of detail is graceful, then gamma encode.
-        float3 mapped = ReinhardToneMap(max(c.rgb, 0.0));
-        c.rgb = LinearToSrgb(mapped);
+        // scRGB linear Rec.709. By definition (1.0,1.0,1.0) = 80 nits =
+        // SDR white. With Windows HDR enabled, the user's "SDR content
+        // brightness" slider scales SDR rendering up by (sdrWhiteNits/80),
+        // so we have to scale back DOWN by that factor or else SDR white
+        // ends up as a scRGB value well above 1.0 and gets clamped to
+        // sRGB white at maximum brightness (washed out / over-bright).
+        // Highlights legitimately above the user's SDR-white level are
+        // hard-clipped after normalization — fine for a screen recorder.
+        float scale = 80.0 / max(sdrWhiteNits, 80.0);
+        float3 normalized = saturate(max(c.rgb, 0.0) * scale);
+        c.rgb = LinearToSrgb(normalized);
     }
     else if (conversionMode == 2)
     {

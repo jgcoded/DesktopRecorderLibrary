@@ -110,13 +110,14 @@ void Pipeline::Perform()
 
             renderMoves.Perform();
 
-            // Pick the conversion based on the per-frame texture format,
-            // not the monitor's reported color space — DDA can flip
-            // between BGRA8 (already tone-mapped to sRGB-ish) and FP16
-            // (scRGB linear Rec.709) within a single HDR-on recording.
-            // R10G10B10A2 would be HDR10 PQ; not seen on this hardware
-            // so far but we handle it for completeness.
-            ColorSpaceCBData csParams{ ColorSpaceCBData::None, 100.0f, 0.0f, 0.0f };
+            // Pick the conversion based on the per-frame texture format.
+            // With DuplicateOutput1 in the duplicator we now get the
+            // native framebuffer format: FP16 (scRGB) under HDR, BGRA8
+            // (sRGB) under SDR. Default sdrWhiteNits to 240 — a common
+            // "SDR content brightness" value on HDR-capable laptops;
+            // ideally we'd query DISPLAYCONFIG_SDR_WHITE_LEVEL but a
+            // sensible constant is close enough as a first cut.
+            ColorSpaceCBData csParams{ ColorSpaceCBData::None, 240.0f, 0.0f, 0.0f };
             switch (frame->Format())
             {
             case DXGI_FORMAT_R16G16B16A16_FLOAT:
