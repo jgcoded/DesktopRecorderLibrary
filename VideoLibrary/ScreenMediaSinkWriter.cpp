@@ -103,17 +103,44 @@ ScreenMediaSinkWriter::ScreenMediaSinkWriter(const EncodingContext& encodingCont
 
     if (audioQuality == AudioQuality::Auto)
     {
-        audioQuality = AudioQuality::Medium;
+        // Medium (96 kbps stereo) is too aggressive for voice — produces
+        // the warbly AAC artifacts users associate with bad recordings.
+        // High (~192 kbps stereo) is a meaningful audible improvement.
+        audioQuality = AudioQuality::High;
     }
 
     auto audioProps = MediaEncodingProfile::CreateM4a(audioQuality).Audio();
 
-    // create audio output media type
+    UINT32 audioBitsPerSample = audioProps.BitsPerSample();
+    UINT32 audioSampleRate = audioProps.SampleRate();
+    UINT32 audioNumChannels = audioProps.ChannelCount();
+    UINT32 audioBitrate = audioProps.Bitrate() / 8;
 
-    auto audioBitsPerSample = audioProps.BitsPerSample();
-    auto audioSampleRate = audioProps.SampleRate();
-    auto audioNumChannels = audioProps.ChannelCount();
-    auto audioBitrate = audioProps.Bitrate() / 8;
+    // Match the encoder output to the source's actual sample rate and
+    // channel layout. Otherwise MF has to resample (e.g. 48 kHz mic ->
+    // 44.1 kHz output) or up/downmix, which costs CPU and can introduce
+    // audible artifacts on top of the AAC compression.
+    UINT32 sourceSampleRate = 0;
+    if (SUCCEEDED(mAudioInputMediaType->GetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND, &sourceSampleRate))
+        && sourceSampleRate > 0)
+    {
+        audioSampleRate = sourceSampleRate;
+    }
+
+    UINT32 sourceChannels = 0;
+    if (SUCCEEDED(mAudioInputMediaType->GetUINT32(MF_MT_AUDIO_NUM_CHANNELS, &sourceChannels))
+        && sourceChannels > 0)
+    {
+        // Scale bitrate proportionally if we deviate from the profile's
+        // default channel count, so dropping stereo->mono doesn't waste
+        // bits on a phantom channel and upmixing doesn't starve them.
+        if (audioNumChannels > 0 && sourceChannels != audioNumChannels)
+        {
+            audioBitrate = static_cast<UINT32>(
+                (static_cast<uint64_t>(audioBitrate) * sourceChannels) / audioNumChannels);
+        }
+        audioNumChannels = sourceChannels;
+    }
 
     // AAC output media type https://msdn.microsoft.com/en-us/library/dd742785(v=vs.85).aspx
     winrt::check_hresult(MFCreateMediaType(mAudioOutputMediaType.put()));
